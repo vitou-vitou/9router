@@ -1,11 +1,6 @@
-# Blueprint for Render. This file is optional if you already created the
-# service in the dashboard — still keep env vars in sync with the live URL.
-#
-# Free web services:
-#   - spin down after ~15 min idle (cold start 30–60s)
-#   - cannot attach a persistent disk → SQLite under DATA_DIR is wiped on
-#     every redeploy / restart / spin-down (accounts, settings, password hash)
-# Upgrade to Starter and add a disk at /app/data if you want data to survive.
+# Blueprint for Render. Persistence of SQLite:
+#   A) Paid: Starter + disk at /app/data
+#   B) Free: set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (Storage sync)
 services:
   - type: web
     name: 9router
@@ -17,15 +12,13 @@ services:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: "20128"
+        value: "10000"
       - key: HOSTNAME
         value: "0.0.0.0"
       - key: DATA_DIR
         value: /app/data
       - key: JWT_SECRET
         generateValue: true
-      # Must be set in the dashboard to a password YOU know. Without this,
-      # remote login is blocked (default 123456 is rejected off-localhost).
       - key: INITIAL_PASSWORD
         sync: false
       - key: API_KEY_SECRET
@@ -44,3 +37,7 @@ services:
         value: "true"
       - key: REQUIRE_API_KEY
         value: "false"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
