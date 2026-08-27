@@ -9,6 +9,42 @@ import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 // Browser OAuth: popup → auto callback → auto exchange → poll-status.
 const PROXY_OAUTH_PROVIDERS = new Set(["trae", "windsurf", "zed"]);
 
+// Claude/Gemini/etc. register loopback redirect URIs only. On a hosted dashboard
+// (Render), window.location.port is empty and HTTPS would otherwise pick 443 —
+// the browser then hits https://localhost/callback and ERR_CONNECTION_REFUSED.
+const LOOPBACK_CALLBACK_PORT = "20128";
+
+function isLoopbackHost(hostname) {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+/** Parse pasted OAuth callback text: full URL, scheme-less host, or raw query. */
+function parseOAuthCallbackInput(input) {
+  const raw = String(input || "").trim();
+  if (!raw) throw new Error("Paste the callback URL from the address bar");
+
+  let href = raw;
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(href)) {
+    if (/^(localhost|127\.0\.0\.1)(:\d+)?(\/|\?|$)/i.test(href)) {
+      href = `http://${href}`;
+    } else if (href.startsWith("?") || /(?:^|[?&])(code|token|state)=/.test(href)) {
+      const q = href.startsWith("?") ? href : `?${href}`;
+      href = `http://localhost/${q}`;
+    } else {
+      href = `http://${href}`;
+    }
+  }
+
+  const url = new URL(href);
+  return {
+    code: url.searchParams.get("code"),
+    token: url.searchParams.get("token"),
+    state: url.searchParams.get("state"),
+    errorParam: url.searchParams.get("error"),
+    errorDescription: url.searchParams.get("error_description"),
+  };
+}
+
 // Providers offering a paste-token fallback (import-token flow).
 // UX warns if the IDE (which issues the token) is not installed.
 const PASTE_TOKEN_PROVIDERS = {
@@ -60,10 +96,13 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
   // Detect if running on localhost (client-side only)
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setIsLocalhost(
-        window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+      const local = isLoopbackHost(window.location.hostname);
+      setIsLocalhost(local);
+      setPlaceholderUrl(
+        local
+          ? `${window.location.origin}/callback?code=...`
+          : `http://localhost:${LOOPBACK_CALLBACK_PORT}/callback?code=...`
       );
-      setPlaceholderUrl(`${window.location.origin}/callback?code=...`);
     }
   }, []);
 
@@ -291,8 +330,13 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         return;
       }
 
-      // Authorization code flow - build redirect URI (some providers require fixed ports)
-      const appPort = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
+      // Authorization code flow - build redirect URI (some providers require fixed ports).
+      // Hosted HTTPS dashboards have an empty location.port; do not fall back to 443.
+      const appPort =
+        window.location.port ||
+        (isLoopbackHost(window.location.hostname)
+          ? (window.location.protocol === "https:" ? "443" : "80")
+          : LOOPBACK_CALLBACK_PORT);
       let redirectUri;
       if (provider === "codex") {
         redirectUri = "http://localhost:1455/auth/callback";
@@ -625,14 +669,10 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         return;
       }
 
-      const url = new URL(input);
-      const code = url.searchParams.get("code");
-      const token = url.searchParams.get("token");
-      const state = url.searchParams.get("state");
-      const errorParam = url.searchParams.get("error");
+      const { code, token, state, errorParam, errorDescription } = parseOAuthCallbackInput(input);
 
       if (errorParam) {
-        throw new Error(url.searchParams.get("error_description") || errorParam);
+        throw new Error(errorDescription || errorParam);
       }
 
       if (!code && !token) {
@@ -799,7 +839,9 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
                     ? "If xAI shows a code instead of redirecting, paste that code here."
                     : isKimchiProvider
                       ? "After authorization, copy the full callback URL or token from your browser."
-                    : "After authorization, copy the full URL from your browser."}
+                    : isLocalhost
+                      ? "After authorization, copy the full URL from your browser."
+                      : "The browser will fail to open localhost — that is expected on Render. Copy the full address bar (it contains ?code=) and paste it here."}
                 </p>
                 <Input
                   value={callbackUrl}

@@ -1,0 +1,46 @@
+# Blueprint for Render. This file is optional if you already created the
+# service in the dashboard — still keep env vars in sync with the live URL.
+#
+# Free web services:
+#   - spin down after ~15 min idle (cold start 30–60s)
+#   - cannot attach a persistent disk → SQLite under DATA_DIR is wiped on
+#     every redeploy / restart / spin-down (accounts, settings, password hash)
+# Upgrade to Starter and add a disk at /app/data if you want data to survive.
+services:
+  - type: web
+    name: 9router
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /dashboard
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "20128"
+      - key: HOSTNAME
+        value: "0.0.0.0"
+      - key: DATA_DIR
+        value: /app/data
+      - key: JWT_SECRET
+        generateValue: true
+      # Must be set in the dashboard to a password YOU know. Without this,
+      # remote login is blocked (default 123456 is rejected off-localhost).
+      - key: INITIAL_PASSWORD
+        sync: false
+      - key: API_KEY_SECRET
+        generateValue: true
+      - key: MACHINE_ID_SALT
+        generateValue: true
+      - key: NEXT_PUBLIC_BASE_URL
+        value: https://ninerouter-su8o.onrender.com
+      - key: BASE_URL
+        value: https://ninerouter-su8o.onrender.com
+      - key: AUTH_COOKIE_SECURE
+        value: "true"
+      - key: ENABLE_REQUEST_LOGS
+        value: "false"
+      - key: OBSERVABILITY_ENABLED
+        value: "true"
+      - key: REQUIRE_API_KEY
+        value: "false"
