@@ -425,9 +425,9 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
           setStep("input");
         }
       } else if (!isLocalhost || provider === "codex" || provider === "xai") {
-        // Non-localhost or proxy failed: manual input mode
+        // Hosted dashboard: do not window.open. Script-opened tabs are closed by
+        // the local /callback page (window.close) before the user can copy ?code=.
         setStep("input");
-        window.open(data.authUrl, "_blank");
       } else {
         // Localhost (non-Codex/xAI): Open popup and wait for message
         setStep("waiting");
@@ -799,22 +799,23 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         {/* Waiting + Manual Input combined (non-device-code, non-proxy) */}
         {(step === "waiting" || step === "input") && !isDeviceCode && !PROXY_OAUTH_PROVIDERS.has(provider) && (
           <>
-            {/* Option A: Auto via popup */}
-            <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
-              <span className="material-symbols-outlined text-base text-primary animate-spin">
-                progress_activity
-              </span>
-              <span className="text-sm">
-                {isXaiProvider ? "Waiting for Grok Build OAuth…" : "Waiting for popup authorization…"}
-              </span>
-            </div>
-
-            {/* Divider */}
-            <div className="flex items-center gap-3 my-1">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs text-text-muted uppercase tracking-wider">Or paste callback URL manually</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
+            {isLocalhost && (
+              <>
+                <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
+                  <span className="material-symbols-outlined text-base text-primary animate-spin">
+                    progress_activity
+                  </span>
+                  <span className="text-sm">
+                    {isXaiProvider ? "Waiting for Grok Build OAuth…" : "Waiting for popup authorization…"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 my-1">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-text-muted uppercase tracking-wider">Or paste callback URL manually</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+              </>
+            )}
 
             {/* Option B: Manual paste */}
             <div className="space-y-4">
@@ -827,6 +828,14 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
                   <Button variant="secondary" icon={copied === "auth_url" ? "check" : "content_copy"} onClick={() => copy(authData?.authUrl, "auth_url")} disabled={!authData?.authUrl}>
                     Copy
                   </Button>
+                  <a
+                    href={authData?.authUrl || "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`inline-flex items-center justify-center rounded-lg border border-border px-3 text-sm ${authData?.authUrl ? "hover:bg-sidebar" : "pointer-events-none opacity-50"}`}
+                  >
+                    Open
+                  </a>
                 </div>
               </div>
 
@@ -841,7 +850,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
                       ? "After authorization, copy the full callback URL or token from your browser."
                     : isLocalhost
                       ? "After authorization, copy the full URL from your browser."
-                      : "The browser will fail to open localhost — that is expected on Render. Copy the full address bar (it contains ?code=) and paste it here."}
+                      : "Use Open (or paste the URL into a new tab you create with Ctrl+T). After login the address bar becomes http://localhost:20128/callback?code=… — copy that whole URL here. A tab the site opened for you will auto-close; a tab you opened yourself will not."}
                 </p>
                 <Input
                   value={callbackUrl}
