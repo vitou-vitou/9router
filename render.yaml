@@ -1,6 +1,12 @@
 # Blueprint for Render. Persistence of SQLite:
 #   A) Paid: Starter + disk at /app/data
 #   B) Free: set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (Storage sync)
+#
+# Headroom runs as the separate `headroom` web service below — this image ships
+# no Python and /api/headroom/start is loopback-only, so the in-container
+# managed mode can never work on Render. Set HEADROOM_TOKEN on BOTH services to
+# the same secret: /v1/compress is public here, and without a token anyone can
+# post prompt content to it.
 services:
   - type: web
     name: 9router
@@ -41,3 +47,31 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # Full URL incl. scheme, e.g. https://headroom-xxxx.onrender.com — Render
+      # assigns the suffix at create time, so this is filled in by hand.
+      - key: HEADROOM_URL
+        sync: false
+      - key: HEADROOM_TOKEN
+        sync: false
+
+  # Compression sidecar. Free web services sleep after ~15min idle and cold-start
+  # in ~1min; the compress call times out at 3s and fails open (uncompressed),
+  # so the first request after idle is simply not compressed.
+  - type: web
+    name: headroom
+    runtime: docker
+    dockerfilePath: ./Dockerfile.headroom
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "10000"
+      # /v1/compress answers non-loopback callers with 404 unless this is set.
+      - key: HEADROOM_COMPRESS_ALLOW_REMOTE
+        value: "1"
+      # Must match HEADROOM_TOKEN on the 9router service.
+      - key: HEADROOM_PROXY_TOKEN
+        sync: false
+      # Free tier is 512MB; the ML reranker does not fit.
+      - key: HEADROOM_DISABLE_KOMPRESS
+        value: "1"

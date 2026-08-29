@@ -14,6 +14,8 @@ export default function TokenSaverClient() {
   const [rtkEnabled, setRtkEnabledState] = useState(true);
   const [headroomEnabled, setHeadroomEnabled] = useState(false);
   const [headroomUrl, setHeadroomUrl] = useState("http://localhost:8787");
+  const [headroomToken, setHeadroomToken] = useState("");
+  const [headroomTokenSet, setHeadroomTokenSet] = useState(false);
   const [headroomStatus, setHeadroomStatus] = useState({
     installed: false,
     running: false,
@@ -121,6 +123,16 @@ export default function TokenSaverClient() {
     setHeadroomUrl(next);
     await patchSetting({ headroomUrl: next });
     refreshHeadroomStatus();
+  };
+
+  // Write-only: the token is never sent back by GET, so an empty box means
+  // "leave whatever is stored alone" rather than "clear it".
+  const handleHeadroomTokenBlur = async () => {
+    const next = headroomToken.trim();
+    if (!next) return;
+    await patchSetting({ headroomToken: next });
+    setHeadroomToken("");
+    setHeadroomTokenSet(true);
   };
 
   const refreshHeadroomStatus = useCallback(async () => {
@@ -415,6 +427,7 @@ export default function TokenSaverClient() {
           setRtkEnabledState(data.rtkEnabled !== false);
           setHeadroomEnabled(!!data.headroomEnabled);
           setHeadroomUrl(data.headroomUrl || "http://localhost:8787");
+          setHeadroomTokenSet(!!data.headroomTokenSet);
           setCodeAware(data.headroomCodeAware === true);
           setKompress(data.headroomKompress !== false);
           setCavemanEnabled(!!data.cavemanEnabled);
@@ -818,6 +831,24 @@ export default function TokenSaverClient() {
               like http://headroom:8787.
             </p>
           </div>
+          {!headroomLocalUrl && (
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium">Proxy Token</p>
+              <Input
+                type="password"
+                value={headroomToken}
+                onChange={(e) => setHeadroomToken(e.target.value)}
+                onBlur={handleHeadroomTokenBlur}
+                placeholder={headroomTokenSet ? "•••••••• (saved)" : "HEADROOM_PROXY_TOKEN"}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-text-muted">
+                Required when the remote proxy runs with HEADROOM_PROXY_TOKEN.
+                Sent as X-Headroom-Proxy-Token. Leave blank to keep the saved
+                value.
+              </p>
+            </div>
+          )}
           {headroomManaged ? (
             <Button
               onClick={handleHeadroomStop}
