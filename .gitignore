@@ -73,6 +73,13 @@ scripts/agSniffer/*
 gitbooks/*
 gitbook/README.md
 
+# Cursor IDE — allow rules & commands
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+!.cursor/commands/
+!.cursor/commands/**
+
 # Refactor backup reference (do not bundle/lint)
 open-sse.old/
 .graphifyignore
