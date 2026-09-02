@@ -142,7 +142,7 @@ export async function POST(request) {
           body: JSON.stringify({
             model: modelId,
             messages: [{ role: "user", content: "ping" }],
-            max_tokens: 1
+            max_tokens: 10
           })
         });
         if (chatRes.ok) {
@@ -182,16 +182,18 @@ export async function POST(request) {
         body: JSON.stringify({
           model: modelId,
           messages: [{ role: "user", content: "ping" }],
-          max_tokens: 1
+          max_tokens: 10
         })
       });
       if (chatRes.ok) {
         return NextResponse.json({ valid: true, method: "chat" });
       }
+      const errBody = await chatRes.text().catch(() => "");
       return NextResponse.json({
         valid: false,
         error: getChatErrorMessage(chatRes.status),
-        method: "chat"
+        method: "chat",
+        details: errBody.slice(0, 200)
       });
     }
 
