@@ -92,6 +92,18 @@ describe("Provider Validation API", () => {
       }));
     });
 
+    it("should strip /chat/completions pasted from Postman (tabitoken)", async () => {
+      const { sanitizeOpenAICompatibleBaseUrl } = await import("open-sse/providers/shared.js");
+      expect(sanitizeOpenAICompatibleBaseUrl("https://tabitoken.com/v1/chat/completions"))
+        .toBe("https://tabitoken.com/v1");
+      expect(sanitizeOpenAICompatibleBaseUrl("https://tabitoken.com/v1/chat/completions/"))
+        .toBe("https://tabitoken.com/v1");
+      expect(sanitizeOpenAICompatibleBaseUrl("https://tabitoken.com/v1"))
+        .toBe("https://tabitoken.com/v1");
+      expect(sanitizeOpenAICompatibleBaseUrl("https://api.example.com/v1/responses"))
+        .toBe("https://api.example.com/v1");
+    });
+
     it("should return error when /models fails and no modelId", async () => {
       global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
 

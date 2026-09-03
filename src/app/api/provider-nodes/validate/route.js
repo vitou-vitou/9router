@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertPublicUrl } from "@/shared/utils/ssrfGuard.js";
 import { isLocalRequest } from "@/dashboardGuard";
+import { sanitizeOpenAICompatibleBaseUrl } from "open-sse/providers/shared.js";
 
 // Fetch with timeout wrapper
 const fetchWithTimeout = (url, options, timeout = 10000) => {
@@ -159,7 +160,8 @@ export async function POST(request) {
     }
 
     // OpenAI Compatible Validation (Default)
-    const modelsUrl = `${baseUrl.replace(/\/$/, "")}/models`;
+    const normalizedBase = sanitizeOpenAICompatibleBaseUrl(baseUrl);
+    const modelsUrl = `${normalizedBase}/models`;
     const res = await fetchWithTimeout(modelsUrl, {
       headers: { "Authorization": `Bearer ${apiKey}` },
     });
@@ -173,7 +175,7 @@ export async function POST(request) {
 
     // Fallback: try chat/completions if modelId provided
     if (modelId) {
-      const chatRes = await fetchWithTimeout(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      const chatRes = await fetchWithTimeout(`${normalizedBase}/chat/completions`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,

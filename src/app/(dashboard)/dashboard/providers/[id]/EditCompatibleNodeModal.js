@@ -105,7 +105,9 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
           value={formData.baseUrl}
           onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
           placeholder={isAnthropic ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1"}
-          hint={`Use the base URL (ending in /v1) for your ${isAnthropic ? "Anthropic" : "OpenAI"}-compatible API.`}
+          hint={isAnthropic
+            ? "Use the base URL (ending in /v1) for your Anthropic-compatible API."
+            : "Base URL ending in /v1 only (e.g. https://tabitoken.com/v1). Do not paste /chat/completions — 9router appends that."}
         />
         <div className="flex gap-2">
           <Input
