@@ -189,6 +189,14 @@ export async function POST(request) {
       if (chatRes.ok) {
         return NextResponse.json({ valid: true, method: "chat" });
       }
+      // Cloudflare HTML 403 on chat is a WAF block, not a bad key
+      if (isCloudflareChallengeResponse(chatRes)) {
+        return NextResponse.json({
+          valid: false,
+          error: "Cloudflare blocked the request (not an API key issue). This provider's gateway may block server-to-server calls from this host.",
+          method: "chat"
+        });
+      }
       const errBody = await chatRes.text().catch(() => "");
       return NextResponse.json({
         valid: false,
