@@ -3,7 +3,7 @@
 // strip the endpoint suffix and append it once — otherwise upstream 404s
 // `POST /v1/chat/completions/chat/completions` while Postman returns 200.
 import { describe, it, expect } from "vitest";
-import { sanitizeOpenAICompatibleBaseUrl } from "open-sse/providers/shared.js";
+import { sanitizeOpenAICompatibleBaseUrl, OPENAI_COMPAT_USER_AGENT, openaiCompatFetchHeaders, isCloudflareChallengeResponse } from "open-sse/providers/shared.js";
 import { DefaultExecutor } from "open-sse/executors/default.js";
 import { BaseExecutor } from "open-sse/executors/base.js";
 
@@ -29,6 +29,16 @@ describe("sanitizeOpenAICompatibleBaseUrl (tabitoken / Postman paste)", () => {
 
   it("strips /responses the same way", () => {
     expect(sanitizeOpenAICompatibleBaseUrl("https://tabitoken.com/v1/responses")).toBe(BASE);
+  });
+
+  it("does not treat JSON 403 as Cloudflare", () => {
+    const res = { status: 403, headers: { get: () => "application/json" } };
+    expect(isCloudflareChallengeResponse(res)).toBe(false);
+  });
+
+  it("treats HTML 403 as Cloudflare (Node UA blocked)", () => {
+    const res = { status: 403, headers: { get: () => "text/html; charset=UTF-8" } };
+    expect(isCloudflareChallengeResponse(res)).toBe(true);
   });
 });
 
@@ -60,5 +70,13 @@ describe("tabitoken runtime URL (Postman vs 9router)", () => {
     const headers = ex.buildHeaders({ apiKey: "sk-test" }, false);
     expect(headers.Authorization).toBe("Bearer sk-test");
     expect(headers["Content-Type"]).toBe("application/json");
+  });
+
+  it("DefaultExecutor sends a Postman-like User-Agent (Cloudflare blocks Node/undici UA with HTML 403)", () => {
+    const ex = new DefaultExecutor(NODE_ID);
+    const headers = ex.buildHeaders({ apiKey: "sk-test" }, false);
+    expect(headers["User-Agent"]).toMatch(/PostmanRuntime/);
+    expect(headers["User-Agent"]).toBe(OPENAI_COMPAT_USER_AGENT);
+    expect(openaiCompatFetchHeaders("sk-test")["User-Agent"]).toBe(OPENAI_COMPAT_USER_AGENT);
   });
 });

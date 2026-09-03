@@ -4,7 +4,7 @@ import { testProxyUrl } from "@/lib/network/proxyTest";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
 import { getDefaultModel } from "open-sse/config/providerModels.js";
 import { resolveOllamaLocalHost, PROVIDERS } from "open-sse/config/providers.js";
-import { sanitizeOpenAICompatibleBaseUrl } from "open-sse/providers/shared.js";
+import { sanitizeOpenAICompatibleBaseUrl, openaiCompatFetchHeaders } from "open-sse/providers/shared.js";
 import {
   refreshProviderCredentials,
   shouldRefreshCredentials,
@@ -472,7 +472,7 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
     if (!modelsBase) return { valid: false, error: "Missing base URL" };
     try {
       const res = await fetchWithConnectionProxy(`${sanitizeOpenAICompatibleBaseUrl(modelsBase)}/models`, {
-        headers: { "Authorization": `Bearer ${connection.apiKey}` },
+        headers: openaiCompatFetchHeaders(connection.apiKey),
       }, effectiveProxy);
       return { valid: res.ok, error: res.ok ? null : "Invalid API key or base URL" };
     } catch (err) {

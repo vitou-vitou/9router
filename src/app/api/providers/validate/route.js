@@ -6,7 +6,7 @@ import { resolveOllamaLocalHost, resolveXiaomiTokenplanBaseUrl, PROVIDERS } from
 import { openaiToCommandCodeRequest } from "open-sse/translator/request/openai-to-commandcode.js";
 import { resolveQoderCredentials, resolveQoderModels } from "open-sse/services/qoderModels.js";
 import { normalizeProviderId } from "@/lib/providerNormalization";
-import { sanitizeOpenAICompatibleBaseUrl } from "open-sse/providers/shared.js";
+import { sanitizeOpenAICompatibleBaseUrl, openaiCompatFetchHeaders } from "open-sse/providers/shared.js";
 
 // Probe a webSearch/webFetch provider using its searchConfig/fetchConfig.
 // Returns true if API key is accepted (status !== 401 && !== 403).
@@ -106,7 +106,7 @@ export async function POST(request) {
         }
         const modelsUrl = `${sanitizeOpenAICompatibleBaseUrl(node.baseUrl)}/models`;
         const res = await fetch(modelsUrl, {
-          headers: { "Authorization": `Bearer ${apiKey}` },
+          headers: openaiCompatFetchHeaders(apiKey),
         });
         isValid = res.ok;
         return NextResponse.json({

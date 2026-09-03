@@ -1,6 +1,6 @@
 import { BaseExecutor } from "./base.js";
 import { PROVIDERS, PROVIDER_OAUTH } from "../config/providers.js";
-import { ANTHROPIC_API_VERSION, OPENAI_COMPAT_BASE, ANTHROPIC_COMPAT_BASE, sanitizeOpenAICompatibleBaseUrl, selectAnthropicBeta } from "../providers/shared.js";
+import { ANTHROPIC_API_VERSION, OPENAI_COMPAT_BASE, ANTHROPIC_COMPAT_BASE, sanitizeOpenAICompatibleBaseUrl, selectAnthropicBeta, OPENAI_COMPAT_USER_AGENT } from "../providers/shared.js";
 import { resolveOpenAICompatibleApiType } from "../services/provider.js";
 import { OAUTH_ENDPOINTS, buildKimiHeaders } from "../config/appConstants.js";
 import { buildClineHeaders } from "../shared/clineAuth.js";
@@ -192,6 +192,9 @@ export class DefaultExecutor extends BaseExecutor {
     }
 
     if (stream) headers["Accept"] = "text/event-stream";
+    if (this.provider?.startsWith?.("openai-compatible-") && !headers["User-Agent"]) {
+      headers["User-Agent"] = OPENAI_COMPAT_USER_AGENT;
+    }
     return headers;
   }
 

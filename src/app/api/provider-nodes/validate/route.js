@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertPublicUrl } from "@/shared/utils/ssrfGuard.js";
 import { isLocalRequest } from "@/dashboardGuard";
-import { sanitizeOpenAICompatibleBaseUrl } from "open-sse/providers/shared.js";
+import { sanitizeOpenAICompatibleBaseUrl, openaiCompatFetchHeaders, isCloudflareChallengeResponse } from "open-sse/providers/shared.js";
 
 // Fetch with timeout wrapper
 const fetchWithTimeout = (url, options, timeout = 10000) => {
@@ -163,13 +163,15 @@ export async function POST(request) {
     const normalizedBase = sanitizeOpenAICompatibleBaseUrl(baseUrl);
     const modelsUrl = `${normalizedBase}/models`;
     const res = await fetchWithTimeout(modelsUrl, {
-      headers: { "Authorization": `Bearer ${apiKey}` },
+      headers: openaiCompatFetchHeaders(apiKey),
     });
 
     if (res.ok) return NextResponse.json({ valid: true });
 
-    // Auth errors - no point trying chat fallback
-    if (res.status === 401 || res.status === 403) {
+    const cloudflareBlock = isCloudflareChallengeResponse(res);
+
+    // Auth errors - no point trying chat fallback (HTML 403 is Cloudflare, not a bad key)
+    if (!cloudflareBlock && (res.status === 401 || res.status === 403)) {
       return NextResponse.json({ valid: false, error: "API key unauthorized" });
     }
 
@@ -177,10 +179,7 @@ export async function POST(request) {
     if (modelId) {
       const chatRes = await fetchWithTimeout(`${normalizedBase}/chat/completions`, {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
+        headers: openaiCompatFetchHeaders(apiKey, { json: true }),
         body: JSON.stringify({
           model: modelId,
           messages: [{ role: "user", content: "ping" }],
@@ -196,6 +195,13 @@ export async function POST(request) {
         error: getChatErrorMessage(chatRes.status),
         method: "chat",
         details: errBody.slice(0, 200)
+      });
+    }
+
+    if (cloudflareBlock) {
+      return NextResponse.json({
+        valid: false,
+        error: "Cloudflare blocked /models. Enter a Model ID (e.g. claude-opus-5-thinking) to Check via chat/completions.",
       });
     }
 
