@@ -827,8 +827,9 @@ export default function TokenSaverClient() {
               className="font-mono text-sm"
             />
             <p className="text-xs text-text-muted">
-              Use a local proxy for Start/Stop, or an external Docker sidecar
-              like http://headroom:8787.
+              {headroomStatus.containerDeploy
+                ? "This deployment has no local proxy — point this at a separate Headroom service, e.g. https://headroom-xxxx.onrender.com."
+                : "Use a local proxy for Start/Stop, or an external Docker sidecar like http://headroom:8787."}
             </p>
           </div>
           {!headroomLocalUrl && (
@@ -873,6 +874,12 @@ export default function TokenSaverClient() {
           ) : !headroomLocalUrl ? (
             <p className="text-sm text-warning">
               Start Headroom separately at the configured URL, then recheck.
+            </p>
+          ) : headroomStatus.containerDeploy ? (
+            <p className="text-sm text-warning">
+              This deployment cannot run Headroom in-process. Deploy the
+              separate `headroom` service (see render.yaml / Dockerfile.headroom)
+              and set its public URL above.
             </p>
           ) : !headroomStatus.python ? (
             <p className="text-sm text-warning">
