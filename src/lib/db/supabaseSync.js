@@ -20,6 +20,8 @@ import { DATA_FILE } from "./paths.js";
 const DEFAULT_BUCKET = "9router-data";
 const DEFAULT_OBJECT = "db/data.sqlite";
 const DEFAULT_SYNC_MS = 30_000;
+const SQLITE_HEADER = "SQLite format 3\0";
+const SQLITE_SIDECARS = ["-wal", "-shm", "-journal"];
 
 function config() {
   const url = String(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
@@ -55,6 +57,30 @@ function headers(key, extra = {}) {
   };
 }
 
+function localSqliteLooksValid() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) return false;
+    const st = fs.statSync(DATA_FILE);
+    if (st.size < SQLITE_HEADER.length) return false;
+    const fd = fs.openSync(DATA_FILE, "r");
+    try {
+      const header = Buffer.alloc(SQLITE_HEADER.length);
+      fs.readSync(fd, header, 0, header.length, 0);
+      return header.toString("utf8") === SQLITE_HEADER;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
+
+function removeSqliteSidecars() {
+  for (const suffix of SQLITE_SIDECARS) {
+    try { fs.unlinkSync(`${DATA_FILE}${suffix}`); } catch { /* no sidecar */ }
+  }
+}
+
 async function ensureBucket(cfg) {
   const res = await fetch(`${cfg.url}/storage/v1/bucket`, {
     method: "POST",
@@ -71,6 +97,14 @@ async function ensureBucket(cfg) {
 export async function pullSqliteFromSupabase() {
   const cfg = config();
   if (!cfg) return false;
+  // Warm restart (same container, ephemeral disk still there) or a local
+  // checkout with SUPABASE_* set: the file on disk is at least as new as the
+  // last completed upload. Blind overwrite here dropped providers/keys written
+  // since that upload, and could replay a leftover WAL onto the stale remote.
+  if (localSqliteLooksValid()) {
+    console.log("[supabase-sync] local DB present — keeping it (not overwritten by remote)");
+    return false;
+  }
   await ensureBucket(cfg);
   const res = await fetch(objectUrl(cfg), { headers: headers(cfg.key) });
   if (res.status === 404) {
@@ -82,12 +116,15 @@ export async function pullSqliteFromSupabase() {
     throw new Error(`download: HTTP ${res.status} ${text.slice(0, 200)}`);
   }
   const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length < 16) {
-    console.warn("[supabase-sync] remote object too small, ignoring");
+  if (buf.length < SQLITE_HEADER.length || buf.subarray(0, SQLITE_HEADER.length).toString("utf8") !== SQLITE_HEADER) {
+    console.warn("[supabase-sync] remote object is not a SQLite database, ignoring");
     return false;
   }
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-  fs.writeFileSync(DATA_FILE, buf);
+  const tmp = `${DATA_FILE}.tmp`;
+  fs.writeFileSync(tmp, buf);
+  fs.renameSync(tmp, DATA_FILE);
+  removeSqliteSidecars();
   console.log(`[supabase-sync] restored ${buf.length} bytes → ${DATA_FILE}`);
   return true;
 }
@@ -102,7 +139,7 @@ export async function pushSqliteToSupabase(adapter) {
   }
   if (!fs.existsSync(DATA_FILE)) return false;
   const buf = fs.readFileSync(DATA_FILE);
-  if (buf.length < 16) return false;
+  if (buf.length < SQLITE_HEADER.length) return false;
   await ensureBucket(cfg);
   const res = await fetch(objectUrl(cfg), {
       method: "POST",
@@ -127,21 +164,29 @@ export function startSupabaseSync(adapter) {
   const cfg = config();
   if (!cfg) return () => {};
 
-  let inFlight = false;
+  let inFlight = null;
   const tick = async (reason) => {
-    if (inFlight) return;
-    inFlight = true;
-    try {
-      await pushSqliteToSupabase(adapter);
-      if (reason === "interval") {
-        /* quiet */
-      } else {
-        console.log(`[supabase-sync] uploaded (${reason})`);
+    // Interval ticks may skip a busy slot; shutdown must wait, then flush
+    // again. Render Free sends SIGTERM on spin-down — dropping that upload
+    // loses every write since the last completed interval.
+    if (inFlight) {
+      if (reason !== "shutdown") return;
+      try { await inFlight; } catch { /* previous attempt already logged */ }
+    }
+    inFlight = (async () => {
+      try {
+        await pushSqliteToSupabase(adapter);
+        if (reason !== "interval") {
+          console.log(`[supabase-sync] uploaded (${reason})`);
+        }
+      } catch (e) {
+        console.warn(`[supabase-sync] upload failed: ${e.message}`);
       }
-    } catch (e) {
-      console.warn(`[supabase-sync] upload failed: ${e.message}`);
+    })();
+    try {
+      await inFlight;
     } finally {
-      inFlight = false;
+      inFlight = null;
     }
   };
 
