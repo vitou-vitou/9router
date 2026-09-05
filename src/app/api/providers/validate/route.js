@@ -308,13 +308,13 @@ export async function POST(request) {
         case "agentrouter": {
           // Use baseUrl from PROVIDERS (DRY); separate openai-format vs claude-format flow
           const cfg = PROVIDERS[provider];
-          const isOpenAiFormat = provider === "glm-cn" || provider === "alicode" || provider === "alicode-intl" || provider === "alims-intl";
+          const isOpenAiFormat = provider === "glm-cn" || provider === "alicode" || provider === "alicode-intl" || provider === "alims-intl" || provider === "agentrouter";
 
           if (isOpenAiFormat) {
             const testModel = getDefaultModel(provider);
             const res = await fetch(cfg.baseUrl, {
               method: "POST",
-              headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },
+              headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json", ...(cfg.headers || {}) },
               body: JSON.stringify({ model: testModel, max_tokens: 1, messages: [{ role: "user", content: "test" }] }),
             });
             isValid = res.status !== 401 && res.status !== 403;
