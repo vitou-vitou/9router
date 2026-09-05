@@ -266,6 +266,72 @@ export function getComboModelsFromData(modelStr, combosData) {
 }
 
 /**
+ * Attempt a single combo model and normalize the outcome for both the sequential
+ * and hybrid paths. Never throws — a thrown error becomes { ok:false, error }.
+ * @returns {Promise<Object>} outcome:
+ *   { ok:true, result, modelStr }
+ *   { ok:false, result, modelStr, errorText, retryAfter, status, shouldFallback, cooldownMs }
+ *   { ok:false, error, modelStr, errorText, status:500, shouldFallback:true }
+ */
+async function attemptComboModel(body, modelStr, handleSingleModel) {
+  try {
+    const result = await handleSingleModel(body, modelStr);
+
+    if (result.ok) return { ok: true, result, modelStr };
+
+    // Extract error info from response
+    let errorText = result.statusText || "";
+    let retryAfter = null;
+    try {
+      const errorBody = await result.clone().json();
+      errorText = errorBody?.error?.message || errorBody?.error || errorBody?.message || errorText;
+      retryAfter = errorBody?.retryAfter || null;
+    } catch {
+      // Ignore JSON parse errors
+    }
+
+    // Normalize error text to string (Worker-safe)
+    if (typeof errorText !== "string") {
+      try { errorText = JSON.stringify(errorText); } catch { errorText = String(errorText); }
+    }
+
+    const { shouldFallback, cooldownMs } = checkFallbackError(result.status, errorText);
+    return { ok: false, result, modelStr, errorText, retryAfter, status: result.status, shouldFallback, cooldownMs };
+  } catch (error) {
+    return { ok: false, error, modelStr, errorText: error.message || String(error), status: 500, shouldFallback: true };
+  }
+}
+
+// Best-effort cancel of a losing raced response so its (possibly streaming) body
+// doesn't leak once a sibling has already won the race.
+function cancelOutcome(outcome) {
+  const res = outcome && outcome.result;
+  if (res && res.body && !res.bodyUsed) {
+    try { res.body.cancel(); } catch { /* ignore */ }
+  }
+}
+
+// Race a set of already-started attempts, resolving with the first successful
+// outcome (returning that response, canceling the losers). If none succeed,
+// returns { failures: [...] } preserving input order.
+async function raceComboAttempts(attempts) {
+  const pending = new Map(attempts.map((a, i) => [i, a.promise]));
+  const failures = new Array(attempts.length);
+  while (pending.size > 0) {
+    const { i, outcome } = await Promise.race(
+      [...pending.entries()].map(async ([idx, p]) => ({ i: idx, outcome: await p }))
+    );
+    pending.delete(i);
+    if (outcome.ok) {
+      for (const [, p] of pending) Promise.resolve(p).then(cancelOutcome).catch(() => {});
+      return { winner: outcome };
+    }
+    failures[i] = outcome;
+  }
+  return { failures: failures.filter(Boolean) };
+}
+
+/**
  * Handle combo chat with fallback
  * @param {Object} options
  * @param {Object} options.body - Request body
@@ -273,7 +339,7 @@ export function getComboModelsFromData(modelStr, combosData) {
  * @param {Function} options.handleSingleModel - Function to handle single model: (body, modelStr) => Promise<Response>
  * @param {Object} options.log - Logger object
  * @param {string} [options.comboName] - Name of the combo (for round-robin tracking)
- * @param {string} [options.comboStrategy] - Strategy: "fallback" or "round-robin"
+ * @param {string} [options.comboStrategy] - Strategy: "fallback" | "round-robin" | "hybrid"
  * @param {number|string} [options.comboStickyLimit=1] - Requests per combo model before switching
  * @returns {Promise<Response>}
  */
@@ -297,67 +363,84 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
   let earliestRetryAfter = null;
   let lastStatus = null;
 
-  for (let i = 0; i < rotatedModels.length; i++) {
+  // Record a failed outcome into the shared fallback-aggregation state.
+  const recordFailure = (outcome) => {
+    if (outcome.retryAfter && (!earliestRetryAfter || new Date(outcome.retryAfter) < new Date(earliestRetryAfter))) {
+      earliestRetryAfter = outcome.retryAfter;
+    }
+    lastError = outcome.errorText || String(outcome.status);
+    if (!lastStatus) lastStatus = outcome.status;
+  };
+
+  // Hybrid: fire the first two models in parallel and return whichever succeeds
+  // first; only if BOTH fail do we fall back through the rest sequentially. This
+  // cuts tail latency (a slow/flaky lead model no longer blocks the whole chain)
+  // while still preferring the top of the list under normal conditions.
+  let startIndex = 0;
+  if (comboStrategy === "hybrid" && rotatedModels.length >= 2) {
+    const pair = rotatedModels.slice(0, 2);
+    log.info("COMBO", `Hybrid race of first 2 models: ${pair.join(", ")}`);
+    const attempts = pair.map((modelStr) => ({
+      modelStr,
+      promise: attemptComboModel(body, modelStr, handleSingleModel),
+    }));
+
+    const raced = await raceComboAttempts(attempts);
+    if (raced.winner) {
+      log.info("COMBO", `Hybrid winner: ${raced.winner.modelStr}`);
+      return raced.winner.result;
+    }
+
+    // Both raced models failed. Honor a hard (non-fallback) error from the
+    // earlier model the same way the sequential path would — return it directly.
+    for (const outcome of raced.failures) {
+      if (!outcome.shouldFallback) {
+        log.warn("COMBO", `Hybrid model ${outcome.modelStr} failed (no fallback)`, { status: outcome.status });
+        return outcome.result;
+      }
+      recordFailure(outcome);
+      log.warn("COMBO", `Hybrid model ${outcome.modelStr} failed`, { status: outcome.status });
+    }
+    startIndex = 2;
+  }
+
+  for (let i = startIndex; i < rotatedModels.length; i++) {
     const modelStr = rotatedModels[i];
     log.info("COMBO", `Trying model ${i + 1}/${rotatedModels.length}: ${modelStr}`);
 
-    try {
-      const result = await handleSingleModel(body, modelStr);
-      
-      // Success (2xx) - return response
-      if (result.ok) {
-        log.info("COMBO", `Model ${modelStr} succeeded`);
-        return result;
-      }
+    const outcome = await attemptComboModel(body, modelStr, handleSingleModel);
 
-      // Extract error info from response
-      let errorText = result.statusText || "";
-      let retryAfter = null;
-      try {
-        const errorBody = await result.clone().json();
-        errorText = errorBody?.error?.message || errorBody?.error || errorBody?.message || errorText;
-        retryAfter = errorBody?.retryAfter || null;
-      } catch {
-        // Ignore JSON parse errors
-      }
-
-      // Track earliest retryAfter across all combo models
-      if (retryAfter && (!earliestRetryAfter || new Date(retryAfter) < new Date(earliestRetryAfter))) {
-        earliestRetryAfter = retryAfter;
-      }
-
-      // Normalize error text to string (Worker-safe)
-      if (typeof errorText !== "string") {
-        try { errorText = JSON.stringify(errorText); } catch { errorText = String(errorText); }
-      }
-
-      // Check if should fallback to next model
-      const { shouldFallback, cooldownMs } = checkFallbackError(result.status, errorText);
-
-      if (!shouldFallback) {
-        log.warn("COMBO", `Model ${modelStr} failed (no fallback)`, { status: result.status });
-        return result;
-      }
-
-      // For transient errors (503/502/504), wait for cooldown before falling through
-      // so a briefly-overloaded provider gets a chance to recover rather than being
-      // skipped immediately (fixes: combo falls through on transient 503)
-      if (cooldownMs && cooldownMs > 0 && cooldownMs <= 5000 &&
-          (result.status === 503 || result.status === 502 || result.status === 504)) {
-        log.info("COMBO", `Model ${modelStr} transient ${result.status}, waiting ${cooldownMs}ms before next`);
-        await new Promise(r => setTimeout(r, cooldownMs));
-      }
-
-      // Fallback to next model
-      lastError = errorText || String(result.status);
-      if (!lastStatus) lastStatus = result.status;
-      log.warn("COMBO", `Model ${modelStr} failed, trying next`, { status: result.status });
-    } catch (error) {
-      // Catch unexpected exceptions to ensure fallback continues
-      lastError = error.message || String(error);
-      if (!lastStatus) lastStatus = 500;
-      log.warn("COMBO", `Model ${modelStr} threw error, trying next`, { error: lastError });
+    // Success (2xx) - return response
+    if (outcome.ok) {
+      log.info("COMBO", `Model ${modelStr} succeeded`);
+      return outcome.result;
     }
+
+    // Thrown exception — continue to next model
+    if (outcome.error) {
+      recordFailure(outcome);
+      log.warn("COMBO", `Model ${modelStr} threw error, trying next`, { error: outcome.errorText });
+      continue;
+    }
+
+    // Non-fallback error (e.g. bad request) — return it directly
+    if (!outcome.shouldFallback) {
+      log.warn("COMBO", `Model ${modelStr} failed (no fallback)`, { status: outcome.status });
+      return outcome.result;
+    }
+
+    // For transient errors (503/502/504), wait for cooldown before falling through
+    // so a briefly-overloaded provider gets a chance to recover rather than being
+    // skipped immediately (fixes: combo falls through on transient 503)
+    if (outcome.cooldownMs && outcome.cooldownMs > 0 && outcome.cooldownMs <= 5000 &&
+        (outcome.status === 503 || outcome.status === 502 || outcome.status === 504)) {
+      log.info("COMBO", `Model ${modelStr} transient ${outcome.status}, waiting ${outcome.cooldownMs}ms before next`);
+      await new Promise(r => setTimeout(r, outcome.cooldownMs));
+    }
+
+    // Fallback to next model
+    recordFailure(outcome);
+    log.warn("COMBO", `Model ${modelStr} failed, trying next`, { status: outcome.status });
   }
 
   // All models failed
