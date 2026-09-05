@@ -1,19 +1,24 @@
-# Blueprint for Render. Persistence of SQLite:
-#   A) Paid: Starter + disk at /app/data
-#   B) Free: set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (Storage sync)
+# Render Blueprint — 9router (MVP, single service).
 #
-# Headroom runs as the separate `headroom` web service below — this image ships
-# no Python and /api/headroom/start is loopback-only, so the in-container
-# managed mode can never work on Render. Set HEADROOM_TOKEN on BOTH services to
-# the same secret: /v1/compress is public here, and without a token anyone can
-# post prompt content to it.
+# The 403 "Blocked" you hit is Render's EDGE WAF (Cloudflare), fired before this
+# container on OWASP path-traversal rules (e.g. "../../etc" in a chat body).
+# It is NOT configurable here — the Blueprint spec has no WAF field. Real fix:
+# front the service with a domain/CDN you control (WAF off), or don't point
+# Cursor at a WAF'd onrender.com host. See chat.
+#
+# Free tier caveats:
+#  - Storage is EPHEMERAL (no disk on free). DATA_DIR wipes on restart/sleep, so
+#    providers + API keys reset every ~15min idle. For real use set SUPABASE_URL
+#    + SUPABASE_SERVICE_ROLE_KEY (free sync) or move to a paid disk.
+#  - Rename `name` / base URLs below to match your actual live service.
+
 services:
   - type: web
-    name: 9router
+    name: ninerouter            # match live service; rename if yours differs
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
-    healthCheckPath: /dashboard
+    healthCheckPath: /api/health # was /dashboard (redirect → never 200)
     envVars:
       - key: NODE_ENV
         value: production
@@ -25,53 +30,23 @@ services:
         value: /app/data
       - key: JWT_SECRET
         generateValue: true
-      - key: INITIAL_PASSWORD
-        sync: false
       - key: API_KEY_SECRET
         generateValue: true
       - key: MACHINE_ID_SALT
         generateValue: true
-      - key: NEXT_PUBLIC_BASE_URL
-        value: https://ninerouter-su8o.onrender.com
-      - key: BASE_URL
-        value: https://ninerouter-su8o.onrender.com
+      - key: INITIAL_PASSWORD
+        sync: false
       - key: AUTH_COOKIE_SECURE
-        value: "true"
-      - key: ENABLE_REQUEST_LOGS
-        value: "false"
-      - key: OBSERVABILITY_ENABLED
         value: "true"
       - key: REQUIRE_API_KEY
         value: "false"
+      # This service's own https URL. Update if the host changes.
+      - key: BASE_URL
+        value: https://ninerouter-9w4m.onrender.com
+      - key: NEXT_PUBLIC_BASE_URL
+        value: https://ninerouter-9w4m.onrender.com
+      # Free persistence (recommended — else config wipes on sleep):
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      # Full URL incl. scheme, e.g. https://headroom-xxxx.onrender.com — Render
-      # assigns the suffix at create time, so this is filled in by hand.
-      - key: HEADROOM_URL
-        sync: false
-      - key: HEADROOM_TOKEN
-        sync: false
-
-  # Compression sidecar. Free web services sleep after ~15min idle and cold-start
-  # in ~1min; the compress call times out at 3s and fails open (uncompressed),
-  # so the first request after idle is simply not compressed.
-  - type: web
-    name: headroom
-    runtime: docker
-    dockerfilePath: ./Dockerfile.headroom
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "10000"
-      # /v1/compress answers non-loopback callers with 404 unless this is set.
-      - key: HEADROOM_COMPRESS_ALLOW_REMOTE
-        value: "1"
-      # Must match HEADROOM_TOKEN on the 9router service.
-      - key: HEADROOM_PROXY_TOKEN
-        sync: false
-      # Free tier is 512MB; the ML reranker does not fit.
-      - key: HEADROOM_DISABLE_KOMPRESS
-        value: "1"
