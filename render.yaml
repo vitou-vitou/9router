@@ -10,6 +10,12 @@
 #  - Storage is EPHEMERAL (no disk on free). DATA_DIR wipes on restart/sleep, so
 #    providers + API keys reset every ~15min idle. For real use set SUPABASE_URL
 #    + SUPABASE_SERVICE_ROLE_KEY (free sync) or move to a paid disk.
+#  - Bandwidth / outbound usage is a SEPARATE limit from disk. A hosted Router
+#    sits on the Client↔Provider path, so agent traffic (streams, tool results)
+#    burns free egress quickly (often on the order of a few GB). When capped,
+#    the service becomes unusable even though the Router itself is fine.
+#    Supabase persistence does NOT fix bandwidth — prefer local, a VPS, paid
+#    Render, or another host with adequate egress for always-on routing.
 #  - Rename `name` / base URLs below to match your actual live service.
 
 services:
