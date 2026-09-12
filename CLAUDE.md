@@ -37,7 +37,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ### Issue tracker
 
-GitHub Issues via `gh` (`vitou-vitou/9router`). See `docs/agents/issue-tracker.md`.
+Local markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
