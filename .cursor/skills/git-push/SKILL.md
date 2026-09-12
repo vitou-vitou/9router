@@ -48,7 +48,9 @@ Scripts live in this repo (relative to workspace root). Works on any PC after cl
    - No upstream → `git push -u origin HEAD`.
    - Rejected (non-fast-forward) → stop, print error, suggest `git pull --rebase`. Do not force.
 
-6. Report, in this order:
+6. Open the commit in the browser: `start <remote-url-without-.git>/commit/<short-sha>` (derive remote from `git remote get-url origin`, converting SSH `git@github.com:x/y.git` → `https://github.com/x/y`).
+
+7. Report, in this order:
    - detected style on its own line (`style: <word>`) — omit when a slash arg was given
    - `trailers: stripped <n>` if step 4b stripped any
    - `<short-sha> <msg> → <remote>/<branch>`
