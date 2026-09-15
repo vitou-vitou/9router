@@ -37,7 +37,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ### Issue tracker
 
-GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
+Local markdown under `.scratch/<feature-slug>/` — `SPEC.md` plus one file per ticket in `issues/NN-slug.md`, triage state as a `Status:` line. No remote tracker. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

@@ -51,6 +51,11 @@ source/*
 .cursor/*
 docs/*
 !docs/ARCHITECTURE.md
+# Agent skill config + ADRs must be tracked (paper trail survives the 2-PC sync)
+!docs/agents/
+!docs/agents/**
+!docs/adr/
+!docs/adr/**
 test/*
 open-sse/test/*
 RM.vn.md
@@ -89,7 +94,9 @@ open-sse.old/
 graphify-out/*
 
 # Local scratch secrets / verify env (scripts OK; keys not)
-.scratch/*.env
+# **/ so env files in .scratch/<feature>/ subdirs are covered too (*.env only,
+# so *.env.example templates stay tracked)
+.scratch/**/*.env
 .scratch/**/*.secret*
 .scratch/_verify-body.json
 
