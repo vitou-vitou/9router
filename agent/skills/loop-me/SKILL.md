@@ -1,5 +1,6 @@
 ---
-description: "Grill me about specs for the workflows I want to build, within this workspace."
+name: loop-me
+description: Grill me about specs for the workflows I want to build, within this workspace.
 ---
 Run a stateful `/grilling` session whose only output is **workflow** specs. Use the grilling discipline (relentless, a round of questions at a time, a recommended answer attached to each) aimed at the vocabulary and goal below. Create, edit, and delete specs as the grilling resolves things.
 

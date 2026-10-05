@@ -1,5 +1,8 @@
 ---
-description: "Migrate test files from `as` type assertions to @total-typescript/shoehorn. Use when user mentions shoehorn, wants to replace `as` in tests, or needs partial test data."
+name: migrate-to-shoehorn
+description: Migrate test files from `as` type assertions to
+  @total-typescript/shoehorn. Use when user mentions shoehorn, wants to replace
+  `as` in tests, or needs partial test data.
 ---
 # Migrate to Shoehorn
 

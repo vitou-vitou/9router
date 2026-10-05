@@ -1,4 +1,5 @@
 ---
+name: writing-fragments
 description: "Writing, explore: mine raw fragments, no structure yet."
 ---
 <what-to-do>

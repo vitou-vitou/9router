@@ -761,12 +761,50 @@ function startServer(updatePromise) {
           const { clearScreen } = require("./src/cli/utils/display");
           clearScreen();
           console.log(`\n⬆  Update v${pkg.version} → v${latestVersion}\n`);
-          console.log(`Run this after exit:\n`);
-          console.log(`   \x1b[33m${INSTALL_CMD_LATEST}\x1b[0m\n`);
+
+          // Resolve the bundled updater script
+          const updaterPath = path.join(standaloneDir, "src", "lib", "updater", "updater.js");
+          if (!fs.existsSync(updaterPath)) {
+            // Fallback: manual update (updater not found in bundle)
+            console.log(`Run this after exit:\n`);
+            console.log(`   \x1b[33m${INSTALL_CMD_LATEST}\x1b[0m\n`);
+            cleanup();
+            await killAllAppProcesses(port);
+            await killProcessOnPort(port);
+            setTimeout(() => process.exit(0), 200);
+            return;
+          }
+
+          console.log(`Installing ${APP_NAME}@latest...\n`);
           cleanup();
           await killAllAppProcesses(port);
           await killProcessOnPort(port);
-          setTimeout(() => process.exit(0), 200);
+
+          // Spawn detached updater (same as web UI's /api/version/update)
+          const relaunchArgs = [APP_NAME, "--skip-update"];
+          spawn(RUNTIME, [updaterPath], {
+            detached: true,
+            stdio: "ignore",
+            windowsHide: true,
+            env: {
+              ...process.env,
+              UPDATER_PKG_NAME: APP_NAME,
+              UPDATER_PORT: "20129",
+              UPDATER_TAIL_LINES: "8",
+              UPDATER_RETRIES: "3",
+              UPDATER_RETRY_DELAY_MS: "5000",
+              UPDATER_LINGER_MS: "30000",
+              UPDATER_WAIT_MIN_MS: "5000",
+              UPDATER_WAIT_MAX_MS: "20000",
+              UPDATER_WAIT_CHECK_MS: "500",
+              UPDATER_APP_PORT: port.toString(),
+              UPDATER_RELAUNCH: "1",
+              UPDATER_RELAUNCH_CMD: process.platform === "win32" ? "npx.cmd" : "npx",
+              UPDATER_RELAUNCH_ARGS: JSON.stringify(relaunchArgs),
+            },
+          }).unref();
+
+          setTimeout(() => process.exit(0), 500);
           return;
         } else if (choice === "web") {
           openBrowser(url);

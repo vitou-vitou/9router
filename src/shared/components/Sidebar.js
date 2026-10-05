@@ -64,7 +64,7 @@ export default function Sidebar({ onClose }) {
   useEffect(() => {
     fetch("/api/version")
       .then(res => res.json())
-      .then(data => { if (data.hasUpdate) setUpdateInfo(data); })
+      .then(data => { setUpdateInfo(data.hasUpdate ? data : null); })
       .catch(() => {});
   }, []);
 

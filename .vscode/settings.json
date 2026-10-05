@@ -1,20 +1,7 @@
 {
-  "css.lint.unknownAtRules": "ignore",
-  "sonarlint.rules": {
-    "css:S4662": {
-      "level": "off"
-    },
-    "javascript:S6747": {
-      "level": "off"
-    },
-    "javascript:S7764": {
-      "level": "off"
-    },
-    "javascript:S6772": {
-      "level": "off"
-    },
-    "javascript:S3776": {
-      "level": "off"
-    }
+  "hasCompletedOnboarding": true,
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://router-uz2an.sevalla.app/v1",
+    "ANTHROPIC_AUTH_TOKEN": "sk-48e9a5ac38f1a2f9-2lijnp-9a466725"
   }
 }

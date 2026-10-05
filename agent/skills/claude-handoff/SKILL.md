@@ -1,5 +1,7 @@
 ---
-description: "Hand the current conversation off to a fresh background agent that picks up the work immediately."
+name: claude-handoff
+description: Hand the current conversation off to a fresh background agent that
+  picks up the work immediately.
 ---
 Write a handoff summary of the current conversation so a fresh agent can continue the work. Instead of saving it, launch a background agent seeded with the summary as its prompt: `claude --bg --name "<descriptive name>" "<handoff summary>"`. It starts in the current working directory and returns immediately; the user manages it with `claude agents`.
 
