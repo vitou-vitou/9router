@@ -221,8 +221,10 @@ ADAPTERS["opencode-go"] = async (apiKey, { fetchImpl }) => {
   const valid = res.status !== 401 && res.status !== 403;
   return { valid, error: valid ? null : "Invalid API key" };
 };
+let cachedComposioConvId = "arc_j52K2uCXH76H";
+
 ADAPTERS["composio-web"] = async (apiKey, { fetchImpl }) => {
-  let cookie = apiKey;
+  let cookie = apiKey || "";
   if (!cookie.includes("wos-session=")) cookie = `wos-session=${cookie}`;
   const res = await fetchImpl("https://dashboard.composio.dev/api/arena", {
     method: "POST",
@@ -234,7 +236,7 @@ ADAPTERS["composio-web"] = async (apiKey, { fetchImpl }) => {
     },
     body: JSON.stringify({
       orgSlug: "pakvitou168_workspace",
-      conversationId: null,
+      conversationId: cachedComposioConvId || null,
       model: "openai/gpt-6.1-sol",
       message: {
         parts: [{ type: "text", text: "ping" }],
@@ -244,7 +246,13 @@ ADAPTERS["composio-web"] = async (apiKey, { fetchImpl }) => {
       },
     }),
   });
+  const convId = res.headers?.get?.("x-conversation-id");
+  if (convId) cachedComposioConvId = convId;
+
   if (res.status === 200) return { valid: true, error: null };
+  if (res.status === 429) {
+    return { valid: true, error: null, warning: "Authenticated (daily chat limit reached on web UI)" };
+  }
   if (res.status === 401 || res.status === 403) return { valid: false, error: "Session expired. Re-paste your fresh wos-session cookie." };
   return { valid: false, error: `Composio Arena returned HTTP ${res.status}` };
 };

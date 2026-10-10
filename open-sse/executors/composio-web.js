@@ -5,6 +5,7 @@ import { sseChunk } from "../utils/sse.js";
 import crypto from "crypto";
 
 const COMPOSIO_ARENA_API = "https://dashboard.composio.dev/api/arena";
+let activeConversationId = "arc_j52K2uCXH76H";
 
 const ARENA_MODEL_MAP = {
   "gpt-6.1-sol": "openai/gpt-6.1-sol",
@@ -235,7 +236,7 @@ export class ComposioWebExecutor extends BaseExecutor {
 
     const arenaPayload = {
       orgSlug,
-      conversationId: null,
+      conversationId: activeConversationId || null,
       model: arenaModel,
       message: {
         parts: [{ type: "text", text: promptText }],
@@ -270,6 +271,10 @@ export class ComposioWebExecutor extends BaseExecutor {
     }
 
     const status = response.status;
+    if (status === 200) {
+      const convId = response.headers?.get?.("x-conversation-id");
+      if (convId) activeConversationId = convId;
+    }
     if (status !== 200) {
       let errMsg = `Composio returned HTTP ${status}`;
       if (status === 401 || status === 403) {
