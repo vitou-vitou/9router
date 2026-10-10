@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "node",
+  "packages": {
+    "node": "22"
+  },
+  "buildAptPackages": [
+    "...",
+    "build-essential",
+    "python3",
+    "make",
+    "g++"
+  ],
+  "steps": {
+    "install": {
+      "commands": [
+        "npm install --include=dev"
+      ]
+    },
+    "build": {
+      "commands": [
+        "mkdir -p /app/data",
+        "npm run build"
+      ]
+    }
+  },
+  "deploy": {
+    "startCommand": "node custom-server.js",
+    "variables": {
+      "NODE_ENV": "production",
+      "NEXT_TELEMETRY_DISABLED": "1",
+      "PORT": "20128",
+      "HOSTNAME": "0.0.0.0",
+      "DATA_DIR": "/app/data"
+    }
+  }
+}
