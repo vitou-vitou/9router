@@ -221,6 +221,34 @@ ADAPTERS["opencode-go"] = async (apiKey, { fetchImpl }) => {
   const valid = res.status !== 401 && res.status !== 403;
   return { valid, error: valid ? null : "Invalid API key" };
 };
+ADAPTERS["composio-web"] = async (apiKey, { fetchImpl }) => {
+  let cookie = apiKey;
+  if (!cookie.includes("wos-session=")) cookie = `wos-session=${cookie}`;
+  const res = await fetchImpl("https://dashboard.composio.dev/api/arena", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: cookie,
+      Origin: "https://dashboard.composio.dev",
+      Referer: "https://dashboard.composio.dev/pakvitou168_workspace/~/bench",
+    },
+    body: JSON.stringify({
+      orgSlug: "pakvitou168_workspace",
+      conversationId: null,
+      model: "openai/gpt-6.1-sol",
+      message: {
+        parts: [{ type: "text", text: "ping" }],
+        id: "probe_ping",
+        role: "user",
+        metadata: { created_at: new Date().toISOString() },
+      },
+    }),
+  });
+  if (res.status === 200) return { valid: true, error: null };
+  if (res.status === 401 || res.status === 403) return { valid: false, error: "Session expired. Re-paste your fresh wos-session cookie." };
+  return { valid: false, error: `Composio Arena returned HTTP ${res.status}` };
+};
+ADAPTERS["composio"] = ADAPTERS["composio-web"];
 
 async function probeVertex(apiKey, fetchImpl) {
   const saJson = (() => { try { const p = JSON.parse(apiKey); return p.type === "service_account" ? p : null; } catch { return null; } })();

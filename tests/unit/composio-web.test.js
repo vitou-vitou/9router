@@ -7,10 +7,10 @@ import { ComposioWebExecutor, parseVercelAiEvent } from "../../open-sse/executor
 describe("Composio Bench Web Provider", () => {
   const entry = REGISTRY.find((e) => e.id === "composio-web");
 
-  it("is registered as a webCookie provider", () => {
+  it("is registered as an apikey provider", () => {
     expect(entry).toBeDefined();
-    expect(entry.category).toBe("webCookie");
-    expect(entry.authType).toBe("cookie");
+    expect(entry.category).toBe("apikey");
+    expect(entry.authType).toBe("apikey");
     expect(entry.alias).toBe("composio-web");
     expect(entry.aliases).toContain("composio");
   });

@@ -19,13 +19,12 @@ export default {
       apiKeyUrl: "https://dashboard.composio.dev/pakvitou168_workspace/~/bench",
     },
   },
-  category: "webCookie",
-  authType: "cookie",
+  category: "apikey",
+  authType: "apikey",
   authHint: "Paste your wos-session= cookie value from dashboard.composio.dev",
   transport: {
     baseUrl: "https://dashboard.composio.dev/api/arena",
     executor: "composio-web",
-    authType: "cookie",
   },
   models: [
     { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
