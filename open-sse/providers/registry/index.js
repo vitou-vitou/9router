@@ -127,6 +127,8 @@ import p126 from "./agentrouter.js";
 import p127 from "./unorouter.js";
 import p128 from "./cavoti.js";
 import p129 from "./freebuff.js";
+import p130 from "./tokenharbor.js";
+import p131 from "./agnes.js";
 
 export default [
   p0,
@@ -255,4 +257,6 @@ export default [
   p127,
   p128,
   p129,
+  p130,
+  p131,
 ];
