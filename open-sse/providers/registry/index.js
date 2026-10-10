@@ -126,6 +126,7 @@ import p122 from "./xquik.js";
 import p126 from "./agentrouter.js";
 import p127 from "./unorouter.js";
 import p128 from "./cavoti.js";
+import p129 from "./freebuff.js";
 
 export default [
   p0,
@@ -253,4 +254,5 @@ export default [
   p126,
   p127,
   p128,
+  p129,
 ];
