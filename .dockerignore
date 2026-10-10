@@ -23,6 +23,12 @@ crates
 **/target
 .scratch
 
+# Test suites & documentation
+tests
+gitbook
+.agents
+agent
+
 # Local env files (inject at runtime via --env-file or -e)
 .env
 .env.local

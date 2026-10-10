@@ -35,5 +35,13 @@ describe("Docker Build Strategy Configuration", () => {
     const content = readFileSync(dockerignorePath, "utf8");
     expect(content).toMatch(/crates/);
     expect(content).toMatch(/\.scratch/);
+    expect(content).toMatch(/tests/);
+    expect(content).toMatch(/gitbook/);
+  });
+
+  it("speeds up npm install with audit and fund skips", () => {
+    const content = readFileSync(dockerfilePath, "utf8");
+    expect(content).toMatch(/--no-audit/);
+    expect(content).toMatch(/--no-fund/);
   });
 });

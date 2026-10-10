@@ -23,6 +23,8 @@ COPY package.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm install \
       --registry="${NPM_REGISTRY}" \
+      --no-audit \
+      --no-fund \
       --fetch-retries=5 \
       --fetch-retry-factor=2 \
       --fetch-retry-mintimeout=10000 \

@@ -37,13 +37,14 @@ Deployments on Sevalla (shown in the dashboard taking 14m 55s+ and hanging) expe
 
 ## 3. Working Solution Cloned to Repository
 
-1. **`Dockerfile`**: Synced with upstream's verified multi-stage build using official global registries and fast package addition.
-2. **`.dockerignore`**: Added `crates`, `**/target`, and `.scratch` to eliminate build context overhead.
-3. **Test Suite**: Added `tests/unit/docker-config.test.js` validating registry defaults, build tools, entrypoints, and ignore rules.
+1. **`Dockerfile`**: Synced with upstream's verified multi-stage build using official global registries, fast package addition, and `--no-audit --no-fund` flags to minimize install overhead.
+2. **`.dockerignore`**: Added `crates`, `**/target`, `.scratch`, `tests`, `gitbook`, `.agents` to drop build context transfer down to minimal size.
+3. **Test Suite**: Added `tests/unit/docker-config.test.js` validating registry defaults, build tools, entrypoints, audit skips, and ignore rules.
 
 ---
 
 ## 4. Verification
 
-- Ran `tests/unit/docker-config.test.js`: 5/5 tests passing.
-- Docker build time reduction on Western PaaS (Sevalla/Railway/Render): drops from 15+ minutes to ~1.5–2 minutes.
+- Ran `tests/unit/docker-config.test.js`: 6/6 tests passing.
+- Total test suite: 26/26 tests passing across `docker-config`, `freebuff`, `nixpacks-config`, and `railpack-config`.
+- Cold build dropped from 15m+ to 3m 14s on Sevalla; subsequent cached deployments reuse image layers for near-instant rollout.
