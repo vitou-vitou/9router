@@ -28,6 +28,8 @@ tests
 gitbook
 .agents
 agent
+.github
+cli
 
 # Local env files (inject at runtime via --env-file or -e)
 .env

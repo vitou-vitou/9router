@@ -37,11 +37,18 @@ describe("Docker Build Strategy Configuration", () => {
     expect(content).toMatch(/\.scratch/);
     expect(content).toMatch(/tests/);
     expect(content).toMatch(/gitbook/);
+    expect(content).toMatch(/cli/);
+    expect(content).toMatch(/\.github/);
   });
 
   it("speeds up npm install with audit and fund skips", () => {
     const content = readFileSync(dockerfilePath, "utf8");
     expect(content).toMatch(/--no-audit/);
     expect(content).toMatch(/--no-fund/);
+  });
+
+  it("leverages next build cache mount for fast incremental rebuilds", () => {
+    const content = readFileSync(dockerfilePath, "utf8");
+    expect(content).toMatch(/--mount=type=cache,target=\/app\/\.next\/cache\s+npm run build/);
   });
 });

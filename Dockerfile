@@ -33,7 +33,7 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 FROM ${NODE_IMAGE} AS runner
 ARG ALPINE_MIRROR

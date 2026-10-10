@@ -37,14 +37,14 @@ Deployments on Sevalla (shown in the dashboard taking 14m 55s+ and hanging) expe
 
 ## 3. Working Solution Cloned to Repository
 
-1. **`Dockerfile`**: Synced with upstream's verified multi-stage build using official global registries, fast package addition, and `--no-audit --no-fund` flags to minimize install overhead.
-2. **`.dockerignore`**: Added `crates`, `**/target`, `.scratch`, `tests`, `gitbook`, `.agents` to drop build context transfer down to minimal size.
-3. **Test Suite**: Added `tests/unit/docker-config.test.js` validating registry defaults, build tools, entrypoints, audit skips, and ignore rules.
+1. **`Dockerfile`**: Synced with upstream's verified multi-stage build using official global registries, fast package addition, `--no-audit --no-fund` flags, and `--mount=type=cache,target=/app/.next/cache` for incremental Next.js compilation.
+2. **`.dockerignore`**: Excluded `crates`, `**/target`, `.scratch`, `tests`, `gitbook`, `.agents`, `agent`, `.github`, and `cli` to drop build context transfer down to minimal size.
+3. **Test Suite**: Added `tests/unit/docker-config.test.js` validating registry defaults, build tools, entrypoints, audit skips, Next.js build cache mount, and ignore rules.
 
 ---
 
 ## 4. Verification
 
-- Ran `tests/unit/docker-config.test.js`: 6/6 tests passing.
-- Total test suite: 26/26 tests passing across `docker-config`, `freebuff`, `nixpacks-config`, and `railpack-config`.
+- Ran `tests/unit/docker-config.test.js`: 7/7 tests passing.
+- Total build configuration suite: 20/20 tests passing across `docker-config`, `nixpacks-config`, and `railpack-config`.
 - Cold build dropped from 15m+ to 3m 14s on Sevalla; subsequent cached deployments reuse image layers for near-instant rollout.
