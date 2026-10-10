@@ -18,6 +18,11 @@ coverage
 data
 logs
 
+# Build caches & scratch
+crates
+**/target
+.scratch
+
 # Local env files (inject at runtime via --env-file or -e)
 .env
 .env.local
