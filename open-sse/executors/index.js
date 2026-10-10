@@ -22,6 +22,7 @@ import { MimoFreeExecutor } from "./mimo-free.js";
 import { CodeBuddyExecutor } from "./codebuddy-cn.js";
 import { CodeBuddyIntlExecutor } from "./codebuddy-intl.js";
 import { FreebuffExecutor } from "./freebuff.js";
+import { ComposioWebExecutor } from "./composio-web.js";
 import TraeExecutor from "./trae.js";
 import ZedExecutor from "./zed.js";
 import WindsurfExecutor from "./windsurf.js";
@@ -59,6 +60,8 @@ const executors = {
   "codebuddy-intl": new CodeBuddyIntlExecutor(),
   freebuff: new FreebuffExecutor(),
   fb: new FreebuffExecutor(), // Alias
+  "composio-web": new ComposioWebExecutor(),
+  composio: new ComposioWebExecutor(), // Alias
   trae: new TraeExecutor(),
   zed: new ZedExecutor(),
   windsurf: new WindsurfExecutor(),
@@ -103,6 +106,7 @@ export { MimoFreeExecutor } from "./mimo-free.js";
 export { CodeBuddyExecutor } from "./codebuddy-cn.js";
 export { CodeBuddyIntlExecutor } from "./codebuddy-intl.js";
 export { FreebuffExecutor } from "./freebuff.js";
+export { ComposioWebExecutor } from "./composio-web.js";
 export { default as TraeExecutor } from "./trae.js";
 export { default as ZedExecutor } from "./zed.js";
 export { default as WindsurfExecutor } from "./windsurf.js";

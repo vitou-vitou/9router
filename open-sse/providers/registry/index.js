@@ -129,7 +129,7 @@ import p128 from "./cavoti.js";
 import p129 from "./freebuff.js";
 import p130 from "./tokenharbor.js";
 import p131 from "./agnes.js";
-import p132 from "./composio.js";
+import p132 from "./composio-web.js";
 
 export default [
   p0,

@@ -60,3 +60,11 @@ Composio ([composio.dev](https://composio.dev)) provides managed authentication,
    - Add Composio brand icon for dashboard display.
 4. **Test Suite (`tests/unit/composio-provider.test.js`):**
    - Verify registry schema conformance, transport defaults, model seeds, and passthrough flags under `/tdd`.
+
+---
+
+## 4. Diagnosis & Retirement Decision (2026-10-10)
+
+- **Symptom:** Pinging any model (`composio/kimi-k3`) resulted in `HTTP 503: [composio/kimi-k3] Invalid JSON response from composio (reset after 30s)`.
+- **Root Cause:** Analysis of `https://backend.composio.dev/api/v3.1/openapi.json` confirmed Composio provides zero LLM inference/chat completion endpoints. Any POST to `/api/v3.1` returns an HTML 404 page ("Lost in the Woods"). Composio Bench is an internal evaluation UI rather than an LLM gateway API.
+- **Decision:** Delete the non-functional `composio` LLM registry entry to eliminate broken endpoints and avoid user confusion. Keep this record in `.scratch/` for future reference.
