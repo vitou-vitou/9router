@@ -1,0 +1,32 @@
+# Nixpacks build strategy configuration for 9router
+# Platforms: Sevalla, Railway, Coolify, Dokploy, Zeabur
+# Reference: https://nixpacks.com/docs/configuration/file
+
+providers = ["node"]
+
+[variables]
+NIXPACKS_NODE_VERSION = "22"
+NODE_ENV = "production"
+NEXT_TELEMETRY_DISABLED = "1"
+PORT = "20128"
+HOSTNAME = "0.0.0.0"
+DATA_DIR = "/app/data"
+
+[phases.setup]
+# python3, gcc, gnumake for node-gyp native addon builds (better-sqlite3 fallback)
+nixPkgs = ["...", "python3", "gcc", "gnumake"]
+
+[phases.install]
+# package-lock.json is gitignored in this repo; npm install must be used instead of npm ci
+cmds = ["npm install --include=dev"]
+
+[phases.build]
+cmds = [
+  "mkdir -p /app/data",
+  "npm run build"
+]
+
+[start]
+# Runs custom-server.js to preserve reverse-proxy header verification,
+# background token refresh scheduler, and h2c downgrade handling.
+cmd = "node custom-server.js"
