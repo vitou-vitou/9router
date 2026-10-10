@@ -3,6 +3,7 @@ import REGISTRY from "../../open-sse/providers/registry/index.js";
 import { PROVIDERS, PROVIDER_MODELS } from "../../open-sse/providers/index.js";
 import { getExecutor } from "../../open-sse/executors/index.js";
 import { ComposioWebExecutor, parseVercelAiEvent } from "../../open-sse/executors/composio-web.js";
+import { probeConnection } from "../../src/lib/providers/connectionProbe.js";
 
 describe("Composio Bench Web Provider", () => {
   const entry = REGISTRY.find((e) => e.id === "composio-web");
@@ -133,5 +134,38 @@ describe("Composio Bench Web Provider", () => {
     } finally {
       global.fetch = originalFetch;
     }
+  });
+
+  it("probes connection as valid on HTTP 200", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      status: 200,
+      headers: { get: () => "arc_new123" },
+    });
+
+    const result = await probeConnection("composio-web", "test-cookie", { fetchImpl: mockFetch });
+    expect(result.valid).toBe(true);
+    expect(result.error).toBeNull();
+  });
+
+  it("probes connection as valid with warning on HTTP 429", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      status: 429,
+      headers: { get: () => null },
+    });
+
+    const result = await probeConnection("composio-web", "test-cookie", { fetchImpl: mockFetch });
+    expect(result.valid).toBe(true);
+    expect(result.warning).toContain("Authenticated");
+  });
+
+  it("probes connection as invalid on HTTP 401", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      status: 401,
+      headers: { get: () => null },
+    });
+
+    const result = await probeConnection("composio-web", "test-cookie", { fetchImpl: mockFetch });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("Session expired");
   });
 });
