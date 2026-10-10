@@ -31,6 +31,14 @@ Provider-agnostic SSE engine: one OpenAI-style request → any provider (LLM cha
 - **Executor** (only for non-standard upstream): subclass `BaseExecutor` (override `getBaseUrls`/`buildHeaders`/`buildUrl`/`execute`), register in `executors/index.js` map. `getExecutor` falls back to `DefaultExecutor` when absent.
 - **Translator**: add `request|response/<from>-to-<to>.js` calling `register(...)`, then import it in `translator/index.js`. Reuse `schema/` + `concerns/` — don't re-implement parsing.
 
+## Web App / Cookie Bridge Providers (e.g. Composio Bench, Grok Web)
+
+- **When to use**: When a service provides frontier LLMs inside an internal web chat/evaluation interface instead of an OpenAI-compatible public REST API.
+- **Wire capture**: Use DevTools Network tab to extract the internal endpoint (e.g. `/api/arena`), auth session cookie, and stream shape (Vercel AI SDK text-delta/reasoning-delta, NDJSON, or SSE).
+- **Conversation State**: Cache and reuse the returned conversation ID (`x-conversation-id`) across turns to avoid exhausting new-chat daily limits (e.g. Composio's 10-new-chats/day rule).
+- **Connection Probes**: Add a custom adapter in `src/lib/providers/connectionProbe.js`. Probes must classify HTTP 429 as `valid: true` (authenticated, but rate-limited).
+- **Dashboard Visibility**: Set `category: "apikey"` in the registry file so the card renders directly in the main Providers grid.
+
 ## Pitfalls
 
 - OpenAI bridge is lossy (thinking, non-base64 images, tool ids, is_error) — prefer a direct route for fragile pairs.

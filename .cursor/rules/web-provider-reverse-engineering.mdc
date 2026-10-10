@@ -1,0 +1,34 @@
+---
+description: Patterns for bridging web-only AI interfaces and cookie-authenticated platforms into 9Router
+globs: open-sse/**, src/lib/providers/**
+alwaysApply: false
+---
+
+# Web App / Cookie Bridge Architecture in 9Router
+
+Use this rule whenever integrating or debugging web-only AI providers (e.g. Composio Bench, Grok Web, Perplexity Web).
+
+## 1. Wire Capture Over Assumptions
+- Never assume an upstream platform exposes standard `/v1/chat/completions`.
+- Always inspect the live browser network payload (e.g. `POST /api/arena`, `/rest/app-chat`, `/rest/sse/perplexity_ask`).
+- Extract the exact session cookie key (e.g. `wos-session=...`, `sso=...`, `__Secure-next-auth.session-token=...`).
+
+## 2. Executor Stream Translation (`open-sse/executors/{id}-web.js`)
+- Subclass `BaseExecutor`.
+- Translate client OpenAI `messages` array into the platform's JSON format.
+- Stream responses back into standard OpenAI SSE chunks (`chat.completion.chunk`) with `delta.content` and `delta.reasoning_content`.
+- Implement non-streaming fallback (`stream: false`) by collecting chunks and returning an OpenAI `chat.completion` response.
+
+## 3. Rate-Limit & Conversation ID Reuse
+- If the upstream service limits new chats (e.g. Composio's 10-new-chats/day limit):
+  - Capture and cache the response conversation ID (e.g. `x-conversation-id` header).
+  - Forward the cached ID in subsequent requests to maintain an active thread and bypass the new-chat rate limit.
+
+## 4. Connection Probe Classification (`src/lib/providers/connectionProbe.js`)
+- Register a dedicated probe in `ADAPTERS["{id}"]`.
+- Treat `HTTP 200` as valid.
+- Treat `HTTP 429` as `valid: true` with a soft warning (the session is authenticated, but rate-limited).
+- Only treat `HTTP 401` and `HTTP 403` as `valid: false` (session expired or missing).
+
+## 5. UI Placement
+- Register with `category: "apikey"` in `open-sse/providers/registry/{id}.js` so the provider renders immediately in the main Providers grid on `/dashboard/providers`.
