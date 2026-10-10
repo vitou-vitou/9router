@@ -30,7 +30,8 @@ function applyFreebucksPriceChanges(info) {
     prices[change.modelId] = change.price;
     priceNotices[change.modelId] = change.tagline;
   }
-  return {\n    ...info,
+  return {
+    ...info,
     prices,
     priceNotices,
     priceChanges: (info.priceChanges || []).filter((c) => Date.parse(c.at) > now),

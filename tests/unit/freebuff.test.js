@@ -3,6 +3,7 @@
 import { describe, it, expect } from "vitest";
 import { getExecutor } from "../../open-sse/executors/index.js";
 import { __test__ } from "../../open-sse/executors/freebuff.js";
+import { getFreebuffUsage } from "../../open-sse/services/usage/freebuff.js";
 
 const CREDS = { accessToken: "test-token", providerSpecificData: {} };
 
@@ -61,5 +62,9 @@ describe("freebuff transformRequest", () => {
   it("prunes state without throwing", () => {
     expect(() => __test__.resetSessionCache()).not.toThrow();
     expect(__test__.pruneSessionState(Date.now())).toBe(0);
+  });
+
+  it("exports getFreebuffUsage without syntax errors", () => {
+    expect(typeof getFreebuffUsage).toBe("function");
   });
 });
