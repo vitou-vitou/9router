@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getSettings } from "@/lib/localDb";
 import { startHeadroomProxy } from "@/lib/headroom/process";
 import { DEFAULT_HEADROOM_URL, isLoopbackHeadroomUrl } from "@/lib/headroom/detect";
-import { isContainerDeploy } from "@/lib/deployMode";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +16,6 @@ function parsePortFromUrl(url) {
 
 export async function POST() {
   try {
-    if (isContainerDeploy()) {
-      return NextResponse.json(
-        { error: "Container deploy: run Headroom as a separate service and set its URL", code: "CONTAINER_DEPLOY" },
-        { status: 400 }
-      );
-    }
     const settings = await getSettings();
     const url = settings.headroomUrl || DEFAULT_HEADROOM_URL;
     if (!isLoopbackHeadroomUrl(url)) {

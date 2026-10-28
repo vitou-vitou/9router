@@ -14,8 +14,6 @@ export default function TokenSaverClient() {
   const [rtkEnabled, setRtkEnabledState] = useState(true);
   const [headroomEnabled, setHeadroomEnabled] = useState(false);
   const [headroomUrl, setHeadroomUrl] = useState("http://localhost:8787");
-  const [headroomToken, setHeadroomToken] = useState("");
-  const [headroomTokenSet, setHeadroomTokenSet] = useState(false);
   const [headroomTimeoutMs, setHeadroomTimeoutMs] = useState(3000);
   const [headroomStatus, setHeadroomStatus] = useState({
     installed: false,
@@ -47,6 +45,8 @@ export default function TokenSaverClient() {
   const [cavemanLevel, setCavemanLevel] = useState("full");
   const [ponytailEnabled, setPonytailEnabled] = useState(false);
   const [ponytailLevel, setPonytailLevel] = useState("full");
+  const [customPromptEnabled, setCustomPromptEnabled] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState("");
   const [pxpipeEnabled, setPxpipeEnabled] = useState(false);
   const [pxpipeMinChars, setPxpipeMinChars] = useState(25000);
   const [pxpipeStatus, setPxpipeStatus] = useState({
@@ -124,16 +124,6 @@ export default function TokenSaverClient() {
     setHeadroomUrl(next);
     await patchSetting({ headroomUrl: next });
     refreshHeadroomStatus();
-  };
-
-  // Write-only: the token is never sent back by GET, so an empty box means
-  // "leave whatever is stored alone" rather than "clear it".
-  const handleHeadroomTokenBlur = async () => {
-    const next = headroomToken.trim();
-    if (!next) return;
-    await patchSetting({ headroomToken: next });
-    setHeadroomToken("");
-    setHeadroomTokenSet(true);
   };
 
   const refreshHeadroomStatus = useCallback(async () => {
@@ -366,6 +356,15 @@ export default function TokenSaverClient() {
     patchSetting({ ponytailLevel: level });
   };
 
+  const handleCustomPromptEnabled = (value) => {
+    setCustomPromptEnabled(value);
+    patchSetting({ customPromptEnabled: value });
+  };
+
+  const handleCustomPromptBlur = () => {
+    patchSetting({ customPrompt });
+  };
+
   const refreshPxpipeStatus = useCallback(async () => {
     setPxpipeStatus((s) => ({ ...s, loading: true }));
     try {
@@ -427,54 +426,32 @@ export default function TokenSaverClient() {
   };
 
   useEffect(() => {
-    const applyToggleFields = (data) => {
-      setRtkEnabledState(data.rtkEnabled !== false);
-      setHeadroomEnabled(!!data.headroomEnabled);
-      setCavemanEnabled(!!data.cavemanEnabled);
-      setPonytailEnabled(!!data.ponytailEnabled);
-    };
-
-    const loadSettings = async ({ togglesOnly = false } = {}) => {
+    const loadSettings = async () => {
       try {
-        const res = await fetch("/api/settings", { headers: { "Cache-Control": "no-store" } });
-        if (!res.ok) return;
-        const data = await res.json();
-        applyToggleFields(data);
-        if (togglesOnly) return;
-        setHeadroomUrl(data.headroomUrl || "http://localhost:8787");
-        setHeadroomTokenSet(!!data.headroomTokenSet);
-        if (typeof data.headroomTimeoutMs === "number") setHeadroomTimeoutMs(data.headroomTimeoutMs);
-        setCodeAware(data.headroomCodeAware === true);
-        setKompress(data.headroomKompress !== false);
-        setCavemanLevel(data.cavemanLevel || "full");
-        setPonytailLevel(data.ponytailLevel || "full");
-        setPxpipeEnabled(!!data.pxpipeEnabled);
-        if (typeof data.pxpipeMinChars === "number") setPxpipeMinChars(data.pxpipeMinChars);
-        refreshHeadroomStatus();
-        // PRD: run the PXPIPE health check automatically when the page opens
-        refreshPxpipeStatus().then(runPxpipeHealth);
+        const res = await fetch("/api/settings");
+        if (res.ok) {
+          const data = await res.json();
+          setRtkEnabledState(data.rtkEnabled !== false);
+          setHeadroomEnabled(!!data.headroomEnabled);
+          setHeadroomUrl(data.headroomUrl || "http://localhost:8787");
+          if (typeof data.headroomTimeoutMs === "number") setHeadroomTimeoutMs(data.headroomTimeoutMs);
+          setCodeAware(data.headroomCodeAware === true);
+          setKompress(data.headroomKompress !== false);
+          setCavemanEnabled(!!data.cavemanEnabled);
+          setCavemanLevel(data.cavemanLevel || "full");
+          setPonytailEnabled(!!data.ponytailEnabled);
+          setPonytailLevel(data.ponytailLevel || "full");
+          setCustomPromptEnabled(!!data.customPromptEnabled);
+          setCustomPrompt(data.customPrompt || "");
+          setPxpipeEnabled(!!data.pxpipeEnabled);
+          if (typeof data.pxpipeMinChars === "number") setPxpipeMinChars(data.pxpipeMinChars);
+          refreshHeadroomStatus();
+          // PRD: run the PXPIPE health check automatically when the page opens
+          refreshPxpipeStatus().then(runPxpipeHealth);
+        }
       } catch {}
     };
-
     loadSettings();
-
-    // Same pattern as EndpointPageClient: refresh when the tab is shown again
-    // (tray / other clients may have changed settings). Poll only while visible —
-    // no background spam on hidden tabs or other dashboard pages.
-    const onVisible = () => {
-      if (!document.hidden) loadSettings({ togglesOnly: true });
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", onVisible);
-    const syncId = setInterval(() => {
-      if (!document.hidden) loadSettings({ togglesOnly: true });
-    }, 1500);
-
-    return () => {
-      clearInterval(syncId);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", onVisible);
-    };
   }, [refreshHeadroomStatus, refreshPxpipeStatus, runPxpipeHealth]);
 
   const headroomRunning = !!headroomStatus.running;
@@ -777,6 +754,37 @@ export default function TokenSaverClient() {
             />
           </div>
         </div>
+        <div className="flex items-center justify-between pt-4 mt-4 border-t border-border gap-4 flex-wrap">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">Custom system prompt</p>
+            <p className="text-sm text-text-muted">
+              Appends your own instruction to every request, independently of
+              the savers above
+            </p>
+          </div>
+          <Toggle
+            checked={customPromptEnabled}
+            onChange={() => handleCustomPromptEnabled(!customPromptEnabled)}
+          />
+        </div>
+        {customPromptEnabled && (
+          <div className="pt-3">
+            <textarea
+              id="custom-prompt"
+              aria-label="Custom system prompt"
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              onBlur={handleCustomPromptBlur}
+              rows={4}
+              placeholder="e.g. Prefer editing existing files over creating new ones."
+              className="w-full rounded border border-border bg-transparent p-2 text-xs"
+            />
+            <p className="text-xs text-text-muted mt-1">
+              Applied to every provider and model. Sent as-is to upstream; an
+              empty prompt injects nothing.
+            </p>
+          </div>
+        )}
         {/* PXPIPE hidden from UI — experimental, not exposed to users yet */}
         {false && (
         <div className="flex items-center justify-between pt-4 mt-4 border-t border-border gap-4 flex-wrap">
@@ -859,29 +867,10 @@ export default function TokenSaverClient() {
               className="font-mono text-sm"
             />
             <p className="text-xs text-text-muted">
-              {headroomStatus.containerDeploy
-                ? "This deployment has no local proxy — point this at a separate Headroom service, e.g. https://headroom-xxxx.onrender.com."
-                : "Use a local proxy for Start/Stop, or an external Docker sidecar like http://headroom:8787."}
+              Use a local proxy for Start/Stop, or an external Docker sidecar
+              like http://headroom:8787.
             </p>
           </div>
-          {!headroomLocalUrl && (
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium">Proxy Token</p>
-              <Input
-                type="password"
-                value={headroomToken}
-                onChange={(e) => setHeadroomToken(e.target.value)}
-                onBlur={handleHeadroomTokenBlur}
-                placeholder={headroomTokenSet ? "•••••••• (saved)" : "HEADROOM_PROXY_TOKEN"}
-                className="font-mono text-sm"
-              />
-              <p className="text-xs text-text-muted">
-                Required when the remote proxy runs with HEADROOM_PROXY_TOKEN.
-                Sent as X-Headroom-Proxy-Token. Leave blank to keep the saved
-                value.
-              </p>
-            </div>
-          )}
           <div className="flex flex-col gap-1">
             <p className="text-sm font-medium">Timeout (ms)</p>
             <Input
@@ -919,12 +908,6 @@ export default function TokenSaverClient() {
           ) : !headroomLocalUrl ? (
             <p className="text-sm text-warning">
               Start Headroom separately at the configured URL, then recheck.
-            </p>
-          ) : headroomStatus.containerDeploy ? (
-            <p className="text-sm text-warning">
-              This deployment cannot run Headroom in-process. Deploy the
-              separate `headroom` service (see render.yaml / Dockerfile.headroom)
-              and set its public URL above.
             </p>
           ) : !headroomStatus.python ? (
             <p className="text-sm text-warning">

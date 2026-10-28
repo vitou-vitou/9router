@@ -3,8 +3,6 @@ import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
 
 const DEFAULT_MITM_ROUTER_BASE = "http://localhost:20128";
 const DEFAULT_HEADROOM_URL = process.env.HEADROOM_URL || "http://localhost:8787";
-// Required by a remote Headroom started with HEADROOM_PROXY_TOKEN; loopback needs none.
-const DEFAULT_HEADROOM_TOKEN = process.env.HEADROOM_TOKEN || "";
 
 const DEFAULT_SETTINGS = {
   cloudEnabled: false,
@@ -54,17 +52,21 @@ const DEFAULT_SETTINGS = {
   rtkEnabled: true,
   headroomEnabled: false,
   headroomUrl: DEFAULT_HEADROOM_URL,
-  headroomToken: DEFAULT_HEADROOM_TOKEN,
   headroomCompressUserMessages: false,
   headroomTimeoutMs: 3000,
   cavemanEnabled: false,
   cavemanLevel: "full",
   ponytailEnabled: false,
   ponytailLevel: "full",
+  // User-authored system prompt, injected independently of the built-in savers.
+  customPromptEnabled: false,
+  customPrompt: "",
   pxpipeEnabled: false,
   pxpipeAutoInstall: true,
   pxpipeMinChars: 25000,
   pxpipeTimeoutMs: 15000,
+  // Per-provider user header overrides applied at dispatch: { [providerId]: { headers: {..} } }
+  providerOverrides: {},
 };
 
 async function readRaw() {
@@ -86,6 +88,16 @@ export function mergeWithDefaults(raw) {
         merged[key] = true;
       } else {
         merged[key] = defVal;
+      }
+    }
+  }
+  if (merged.capacityAdapter && typeof merged.capacityAdapter === "object") {
+    for (const capKey of Object.keys(merged.capacityAdapter)) {
+      const entry = merged.capacityAdapter[capKey];
+      if (Array.isArray(entry?.models)) {
+        entry.models = entry.models.map((m) =>
+          m === "oc/mimo-v2.5-free" ? "oc/mimo-v2.6-flash-free" : m
+        );
       }
     }
   }

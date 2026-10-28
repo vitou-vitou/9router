@@ -17,9 +17,8 @@ const PROTECTED_SETTING_KEYS = ["password", "mitmSudoEncrypted"];
 export async function GET() {
   try {
     const settings = await getSettings();
-    const { password, oidcClientSecret, headroomToken, ...safeSettings } = settings;
+    const { password, oidcClientSecret, ...safeSettings } = settings;
     safeSettings.oidcConfigured = !!(safeSettings.oidcIssuerUrl && safeSettings.oidcClientId && oidcClientSecret);
-    safeSettings.headroomTokenSet = !!headroomToken;
     
     const enableRequestLogs = process.env.ENABLE_REQUEST_LOGS === "true";
     const enableTranslator = process.env.ENABLE_TRANSLATOR === "true";
@@ -77,12 +76,6 @@ export async function PATCH(request) {
       }
     }
 
-    // Blank submit from the masked field must not wipe the stored token.
-    if (Object.prototype.hasOwnProperty.call(body, "headroomToken")) {
-      if (!String(body.headroomToken ?? "").trim()) delete body.headroomToken;
-      else body.headroomToken = String(body.headroomToken).trim();
-    }
-
     const settings = await updateSettings(body);
 
     // Apply outbound proxy settings immediately (no restart required)
@@ -115,9 +108,8 @@ export async function PATCH(request) {
         .catch((error) => console.warn("[AutoPing] settings update failed:", error.message));
     }
 
-    const { password, oidcClientSecret, headroomToken, ...safeSettings } = settings;
+    const { password, oidcClientSecret, ...safeSettings } = settings;
     safeSettings.oidcConfigured = !!(safeSettings.oidcIssuerUrl && safeSettings.oidcClientId && oidcClientSecret);
-    safeSettings.headroomTokenSet = !!headroomToken;
     return NextResponse.json(safeSettings, { headers: SETTINGS_RESPONSE_HEADERS });
   } catch (error) {
     console.log("Error updating settings:", error);
