@@ -83,7 +83,7 @@ services:
       - headroom
 
   headroom:
-    image: ghcr.io/chopratejas/headroom:latest
+    image: ghcr.io/headroomlabs-ai/headroom:latest
     ports:
       - "8787:8787"
 ```
@@ -91,6 +91,13 @@ services:
 In the dashboard, open `Endpoint` → `Token Saver` → `Headroom`, confirm the URL is `http://headroom:8787`, recheck status, then enable Headroom.
 
 If Headroom runs on the Docker host instead of as a sidecar, use `http://host.docker.internal:8787` on macOS/Windows. On Linux, add `--add-host=host.docker.internal:host-gateway` or the equivalent compose `extra_hosts` entry.
+
+## Headroom bundled in the image (Sevalla / single-container hosts)
+
+`decolua/9router` ships Headroom pre-installed (`headroom-ai[proxy,code]` in `/opt/headroom`). The entrypoint starts it on `127.0.0.1:8787` (loopback only — never exposed), pid-tracked at `$DATA_DIR/headroom/proxy.pid`, so the dashboard Token Saver `Start/Stop`, `[code]`/`[ml]` toggles (restart), and status probes all work unchanged. No `HEADROOM_URL` or sidecar service needed — the default `http://localhost:8787` is correct.
+
+- `[ml]` (Kompress, ~1 GB torch) is not baked in; installing it from the dashboard persists only until the next image update. For `[ml]`, build a custom image with `/opt/headroom/bin/pip install "headroom-ai[proxy,code,ml]"`.
+- Set `HEADROOM_BUNDLED=0` to skip starting it (e.g. when pointing at an external proxy URL).
 
 ## Update to latest
 
