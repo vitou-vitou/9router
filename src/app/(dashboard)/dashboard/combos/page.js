@@ -77,6 +77,7 @@ export default function CombosPage() {
   const { getCaps } = useModelCaps();
   const [confirmState, setConfirmState] = useState(null);
   const [presetLoading, setPresetLoading] = useState(null); // "cursor" | "claude" | null
+  const [apinexSyncing, setApinexSyncing] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -178,6 +179,25 @@ export default function CombosPage() {
       alert(`Failed to preview ${label}`);
     } finally {
       setPresetLoading(null);
+    }
+  };
+
+  const handleApinexSync = async () => {
+    setApinexSyncing(true);
+    try {
+      const res = await fetch("/api/combos/apinex-sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "APInex sync failed");
+        return;
+      }
+      await fetchData();
+      alert(`Synced ${data.modelsImported} free models from APInex`);
+    } catch (error) {
+      console.log("APInex sync error:", error);
+      alert("Failed to sync APInex free models");
+    } finally {
+      setApinexSyncing(false);
     }
   };
 
@@ -433,6 +453,16 @@ export default function CombosPage() {
           </div>
           <Button icon="add" onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto whitespace-nowrap">
             Create Combo
+          </Button>
+          <Button
+            variant="secondary"
+            icon="sync"
+            loading={apinexSyncing}
+            disabled={apinexSyncing}
+            onClick={handleApinexSync}
+            className="w-full sm:w-auto whitespace-nowrap"
+          >
+            {apinexSyncing ? "Syncing…" : "Sync APInex Free"}
           </Button>
           <div className="hidden">
             <Button
