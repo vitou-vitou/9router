@@ -1,9 +1,13 @@
-const { exec } = require("child_process");
+const { exec, execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
 let trayInstance = null;
 let isWinTray = false;
+
+// How long to wait for systray2's Go child to write its stdout handshake
+// before treating the tray as failed.
+const TRAY_READY_TIMEOUT_MS = 3000;
 
 /**
  * Get icon base64 from file — used for systray (mac/linux)
@@ -38,88 +42,35 @@ function isTraySupported() {
 
 /**
  * Initialize system tray with menu
- * @param {Object} options - { port, onQuit, onOpenDashboard }
+ * @param {Object} options - { port, onQuit, onOpenDashboard, onReady, onError }
+ *   onReady/onError are optional and fire once the tray is actually usable (or
+ *   provably is not). Callers must not announce a tray icon before onReady:
+ *   the systray2 child can die before it ever registers one.
  * @returns {Object|null} tray instance or null if not supported/failed
  */
 function initTray(options) {
   if (!isTraySupported()) {
+    options.onError?.(new Error("no graphical session (DISPLAY/WAYLAND_DISPLAY unset)"));
     return null;
   }
-
-  configureTrayApi(options?.port);
 
   // Windows uses PowerShell NotifyIcon (AV-safe), others use systray
   if (process.platform === "win32") {
-    // Await settings before first paint so RTK label matches dashboard (no race).
-    initWindowsTray(options).catch(() => {});
-    return null;
+    return initWindowsTray(options);
   }
-  initUnixTray(options).catch(() => {});
-  return null;
+  return initUnixTray(options);
 }
-
-function autostartMenuTitle(enabled) {
-  return enabled ? "✓ Auto-start Enabled" : "Enable Auto-start";
-}
-
-function rtkMenuTitle(enabled) {
-  return enabled ? "✓ RTK Enabled" : "Enable RTK";
-}
-
-function headroomMenuTitle(enabled) {
-  return enabled ? "✓ Headroom Enabled" : "Enable Headroom";
-}
-
-function cavemanMenuTitle(enabled) {
-  return enabled ? "✓ Caveman Enabled" : "Enable Caveman";
-}
-
-function ponytailMenuTitle(enabled) {
-  return enabled ? "✓ Ponytail Enabled" : "Enable Ponytail";
-}
-
-/** @typedef {{ rtk?: boolean, headroom?: boolean, caveman?: boolean, ponytail?: boolean }} TokenSaverFlags */
 
 /**
- * Build menu items array shared between platforms.
- * Third arg: TokenSaverFlags object, or legacy boolean = rtk only.
+ * Build menu items array shared between platforms
  */
-function buildMenuItems(port, autostartEnabled, tokenSaver = true) {
-  const flags = typeof tokenSaver === "boolean"
-    ? { rtk: tokenSaver, headroom: false, caveman: false, ponytail: false }
-    : {
-      rtk: tokenSaver?.rtk !== false,
-      headroom: !!tokenSaver?.headroom,
-      caveman: !!tokenSaver?.caveman,
-      ponytail: !!tokenSaver?.ponytail
-    };
-
+function buildMenuItems(port, autostartEnabled) {
   return [
     { title: `9Router (Port ${port})`, tooltip: "Server is running", enabled: false },
     { title: "Open Dashboard", tooltip: "Open in browser", enabled: true },
     {
-      title: autostartMenuTitle(autostartEnabled),
+      title: autostartEnabled ? "✓ Auto-start Enabled" : "Enable Auto-start",
       tooltip: "Run on OS startup",
-      enabled: true
-    },
-    {
-      title: rtkMenuTitle(flags.rtk),
-      tooltip: "Token Saver — compress tool results",
-      enabled: true
-    },
-    {
-      title: headroomMenuTitle(flags.headroom),
-      tooltip: "Token Saver — compress context via Headroom",
-      enabled: true
-    },
-    {
-      title: cavemanMenuTitle(flags.caveman),
-      tooltip: "Token Saver — terse LLM output style",
-      enabled: true
-    },
-    {
-      title: ponytailMenuTitle(flags.ponytail),
-      tooltip: "Token Saver — minimal-code bias",
       enabled: true
     },
     { title: "Quit", tooltip: "Stop server and exit", enabled: true }
@@ -127,51 +78,7 @@ function buildMenuItems(port, autostartEnabled, tokenSaver = true) {
 }
 
 // Menu item indexes
-const MENU_INDEX = {
-  STATUS: 0,
-  DASHBOARD: 1,
-  AUTOSTART: 2,
-  RTK: 3,
-  HEADROOM: 4,
-  CAVEMAN: 5,
-  PONYTAIL: 6,
-  QUIT: 7
-};
-
-const TOKEN_SAVER_DEFS = {
-  rtk: {
-    index: MENU_INDEX.RTK,
-    settingKey: "rtkEnabled",
-    titleFn: rtkMenuTitle,
-    tooltip: "Token Saver — compress tool results",
-    read: (d) => d?.rtkEnabled !== false,
-    defaultOn: true
-  },
-  headroom: {
-    index: MENU_INDEX.HEADROOM,
-    settingKey: "headroomEnabled",
-    titleFn: headroomMenuTitle,
-    tooltip: "Token Saver — compress context via Headroom",
-    read: (d) => !!d?.headroomEnabled,
-    defaultOn: false
-  },
-  caveman: {
-    index: MENU_INDEX.CAVEMAN,
-    settingKey: "cavemanEnabled",
-    titleFn: cavemanMenuTitle,
-    tooltip: "Token Saver — terse LLM output style",
-    read: (d) => !!d?.cavemanEnabled,
-    defaultOn: false
-  },
-  ponytail: {
-    index: MENU_INDEX.PONYTAIL,
-    settingKey: "ponytailEnabled",
-    titleFn: ponytailMenuTitle,
-    tooltip: "Token Saver — minimal-code bias",
-    read: (d) => !!d?.ponytailEnabled,
-    defaultOn: false
-  }
-};
+const MENU_INDEX = { STATUS: 0, DASHBOARD: 1, AUTOSTART: 2, QUIT: 3 };
 
 /**
  * Get current autostart state
@@ -183,141 +90,6 @@ function getAutostartEnabled() {
   } catch (e) {
     return false;
   }
-}
-
-function configureTrayApi(port) {
-  try {
-    const api = require("../api/client");
-    api.configure({ host: "127.0.0.1", port: port || 20128 });
-  } catch (e) {}
-}
-
-/** @type {TokenSaverFlags} */
-let lastTokenSaver = {
-  rtk: null,
-  headroom: null,
-  caveman: null,
-  ponytail: null
-};
-
-function defaultTokenSaverFlags() {
-  return {
-    rtk: lastTokenSaver.rtk !== null ? lastTokenSaver.rtk : true,
-    headroom: lastTokenSaver.headroom !== null ? lastTokenSaver.headroom : false,
-    caveman: lastTokenSaver.caveman !== null ? lastTokenSaver.caveman : false,
-    ponytail: lastTokenSaver.ponytail !== null ? lastTokenSaver.ponytail : false
-  };
-}
-
-/**
- * Read all Token Saver flags from live settings API.
- */
-async function getTokenSaverFlags() {
-  try {
-    const api = require("../api/client");
-    const res = await api.getSettings();
-    if (res?.success) {
-      lastTokenSaver = {
-        rtk: TOKEN_SAVER_DEFS.rtk.read(res.data),
-        headroom: TOKEN_SAVER_DEFS.headroom.read(res.data),
-        caveman: TOKEN_SAVER_DEFS.caveman.read(res.data),
-        ponytail: TOKEN_SAVER_DEFS.ponytail.read(res.data)
-      };
-      return { ...lastTokenSaver };
-    }
-  } catch (e) {}
-  return defaultTokenSaverFlags();
-}
-
-/** @deprecated use getTokenSaverFlags — kept for tests */
-async function getRtkEnabled() {
-  const flags = await getTokenSaverFlags();
-  return flags.rtk;
-}
-
-/**
- * Toggle one Token Saver flag. Returns new enabled state, or null on failure.
- */
-async function toggleTokenSaverFlag(kind, currentlyOn) {
-  const def = TOKEN_SAVER_DEFS[kind];
-  if (!def) return null;
-  try {
-    const api = require("../api/client");
-    const next = !currentlyOn;
-    const res = await api.updateSettings({ [def.settingKey]: next });
-    if (res?.success) {
-      const enabled = def.read(res.data);
-      lastTokenSaver[kind] = enabled;
-      return enabled;
-    }
-  } catch (e) {}
-  return null;
-}
-
-function updateTokenSaverItem(kind, enabled) {
-  if (!trayInstance) return;
-  const def = TOKEN_SAVER_DEFS[kind];
-  if (!def) return;
-  const title = def.titleFn(enabled);
-  if (isWinTray && typeof trayInstance.updateItem === "function") {
-    trayInstance.updateItem(def.index, title, true);
-  } else if (typeof trayInstance.sendAction === "function") {
-    trayInstance.sendAction({
-      type: "update-item",
-      item: { title, tooltip: def.tooltip, enabled: true },
-      seq_id: def.index
-    });
-  }
-}
-
-function applyTokenSaverFlagsToMenu(flags) {
-  for (const kind of Object.keys(TOKEN_SAVER_DEFS)) {
-    updateTokenSaverItem(kind, !!flags[kind]);
-  }
-}
-
-/**
- * Re-read settings and update all Token Saver menu labels.
- */
-function refreshTokenSaverMenuLabels() {
-  getTokenSaverFlags().then((flags) => {
-    if (!trayInstance) return;
-    applyTokenSaverFlagsToMenu(flags);
-  }).catch(() => {});
-}
-
-let tokenSaverPollTimer = null;
-
-function startTokenSaverPoll() {
-  if (tokenSaverPollTimer) return;
-  tokenSaverPollTimer = setInterval(() => refreshTokenSaverMenuLabels(), 1500);
-  if (typeof tokenSaverPollTimer.unref === "function") tokenSaverPollTimer.unref();
-}
-
-function stopTokenSaverPoll() {
-  if (tokenSaverPollTimer) {
-    clearInterval(tokenSaverPollTimer);
-    tokenSaverPollTimer = null;
-  }
-}
-
-function handleTokenSaverClick(kind) {
-  (async () => {
-    const cached = lastTokenSaver[kind];
-    const enabled = cached !== null && cached !== undefined
-      ? cached
-      : (await getTokenSaverFlags())[kind];
-    const optimistic = !enabled;
-    updateTokenSaverItem(kind, optimistic);
-    lastTokenSaver[kind] = optimistic;
-    const next = await toggleTokenSaverFlag(kind, enabled);
-    if (next === null) {
-      lastTokenSaver[kind] = enabled;
-      updateTokenSaverItem(kind, enabled);
-    } else {
-      updateTokenSaverItem(kind, next);
-    }
-  })().catch(() => {});
 }
 
 /**
@@ -336,14 +108,6 @@ function handleClick(index, options, onAutostartToggle) {
       else enableAutoStart();
       onAutostartToggle(!enabled);
     } catch (e) {}
-  } else if (index === MENU_INDEX.RTK) {
-    handleTokenSaverClick("rtk");
-  } else if (index === MENU_INDEX.HEADROOM) {
-    handleTokenSaverClick("headroom");
-  } else if (index === MENU_INDEX.CAVEMAN) {
-    handleTokenSaverClick("caveman");
-  } else if (index === MENU_INDEX.PONYTAIL) {
-    handleTokenSaverClick("ponytail");
   } else if (index === MENU_INDEX.QUIT) {
     console.log("\n👋 Shutting down...");
     if (onQuit) onQuit();
@@ -355,14 +119,13 @@ function handleClick(index, options, onAutostartToggle) {
 /**
  * Windows tray via PowerShell NotifyIcon
  */
-async function initWindowsTray(options) {
+function initWindowsTray(options) {
   const { port } = options;
   try {
     const { initWinTray } = require("./trayWin");
     const iconPath = path.join(__dirname, "icon.ico");
     const autostartEnabled = getAutostartEnabled();
-    const tokenSaver = await getTokenSaverFlags();
-    const items = buildMenuItems(port, autostartEnabled, tokenSaver);
+    const items = buildMenuItems(port, autostartEnabled);
 
     trayInstance = initWinTray({
       iconPath,
@@ -370,16 +133,17 @@ async function initWindowsTray(options) {
       items,
       onClick: (index) => {
         handleClick(index, options, (newEnabled) => {
-          trayInstance.updateItem(MENU_INDEX.AUTOSTART, autostartMenuTitle(newEnabled), true);
+          const newTitle = newEnabled ? "✓ Auto-start Enabled" : "Enable Auto-start";
+          trayInstance.updateItem(MENU_INDEX.AUTOSTART, newTitle, true);
         });
-      },
-      onMenuOpen: () => refreshTokenSaverMenuLabels()
+      }
     });
 
     isWinTray = true;
-    startTokenSaverPoll();
+    options.onReady?.();
     return trayInstance;
   } catch (err) {
+    options.onError?.(err);
     return null;
   }
 }
@@ -387,11 +151,14 @@ async function initWindowsTray(options) {
 /**
  * macOS/Linux tray via systray binary
  *
- * Prefers `systray2` (active fork of `systray`, ships newer
- * getlantern/systray-portable binaries that work on macOS 14+ and Apple
- * Silicon under Rosetta). Falls back to legacy `systray@1.0.5` if systray2
- * is not available, though that binary's Mach-O headers are rejected by
- * modern dyld and the icon will not appear.
+ * Prefers `systray2`, the active fork of `systray`. Both ship only an x86_64
+ * `tray_darwin_release` and select it by process.platform alone, so on Apple
+ * Silicon the tray runs under Rosetta 2 and fails with EBADARCH when Rosetta is
+ * absent. hooks/trayRuntime.js overlays a native arm64 build over that file to
+ * avoid the dependency; the fallbacks below are Intel-only.
+ *
+ * Falls back to legacy `systray@1.0.5` if systray2 is unavailable, though that
+ * binary's Mach-O headers are rejected by modern dyld and no icon will appear.
  */
 function resolveSystray() {
   let runtimeDir = null;
@@ -431,7 +198,55 @@ function chmodTrayBin(pkgName) {
   } catch (e) {}
 }
 
-async function initUnixTray(options) {
+/**
+ * Shared libraries the tray binary needs but cannot load.
+ * ldd prints "<soname> => not found" for each one.
+ */
+function missingSharedLibs(binPath) {
+  try {
+    const out = execFileSync("ldd", [binPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 2000
+    });
+    return out
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.endsWith("not found"))
+      .map((line) => line.split(/\s+/)[0]);
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Turn a dead Linux tray child into something the user can act on.
+ *
+ * systray2's bundled Go binary links against libappindicator3.so.1 (the Ubuntu
+ * ABI). Distros that ship only the maintained libayatana fork (Arch, for one)
+ * expose the same symbols under libayatana-appindicator3.so.1, so ld.so aborts
+ * the child with exit 127 before it writes its handshake: systray2's ready()
+ * never settles and the tray silently never appears.
+ *
+ * Returns null when there is nothing useful to say.
+ */
+function linuxTrayHint(binPath) {
+  if (process.platform !== "linux" || !binPath) return null;
+  const missing = missingSharedLibs(binPath);
+  if (missing.length === 0) return null;
+
+  const lines = [`  missing shared libraries: ${missing.join(", ")}`];
+  if (missing.includes("libappindicator3.so.1")) {
+    lines.push(
+      "  Some distros (Arch, for example) ship only the libayatana fork, which is",
+      "  ABI-compatible. Install your distro's libappindicator3 package, or link it:",
+      "    sudo ln -s /usr/lib/libayatana-appindicator3.so.1 /usr/lib/libappindicator3.so.1"
+    );
+  }
+  return lines.join("\n");
+}
+
+function initUnixTray(options) {
   const { port } = options;
   try {
     const resolved = resolveSystray();
@@ -441,8 +256,7 @@ async function initUnixTray(options) {
     chmodTrayBin(isV2 ? "systray2" : "systray");
 
     const autostartEnabled = getAutostartEnabled();
-    const tokenSaver = await getTokenSaverFlags();
-    const items = buildMenuItems(port, autostartEnabled, tokenSaver);
+    const items = buildMenuItems(port, autostartEnabled);
 
     const menu = {
       icon: getIconBase64(),
@@ -463,7 +277,7 @@ async function initUnixTray(options) {
         trayInstance.sendAction({
           type: "update-item",
           item: {
-            title: autostartMenuTitle(newEnabled),
+            title: newEnabled ? "✓ Auto-start Enabled" : "Enable Auto-start",
             tooltip: "Run on OS startup",
             enabled: true
           },
@@ -473,22 +287,41 @@ async function initUnixTray(options) {
     });
 
     if (isV2) {
-      // systray2 exposes a ready() promise instead of onReady/onError. Surface
-      // failures (binary crash, EACCES, etc.) so users can see why the icon
-      // didn't appear instead of getting a misleading "running in tray" log.
-      trayInstance.ready().catch((err) => {
-        process.stderr.write(`[9router] tray failed to start: ${err && err.message ? err.message : err}\n`);
-      });
+      // systray2 resolves ready() only once the Go child writes its single
+      // handshake line to stdout. A child that dies before that (missing
+      // shared library, EACCES, wrong architecture) emits no 'error' event and
+      // no line, so the promise stays pending forever while the caller
+      // announces a tray icon that isn't there. Bound it with a timeout.
+      let settled = false;
+      const reportFailure = (err) => {
+        if (settled) return;
+        settled = true;
+        const hint = linuxTrayHint(trayInstance && trayInstance._binPath);
+        options.onError?.(hint ? new Error(`${err.message}\n${hint}`) : err);
+      };
+      const timer = setTimeout(
+        () => reportFailure(new Error(`no handshake from the tray process within ${TRAY_READY_TIMEOUT_MS}ms`)),
+        TRAY_READY_TIMEOUT_MS
+      );
+
+      trayInstance
+        .ready()
+        .then(() => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          options.onReady?.();
+        })
+        .catch(reportFailure);
     } else {
-      trayInstance.onReady(() => {});
+      trayInstance.onReady(() => options.onReady?.());
       trayInstance.onError(() => {});
     }
 
-    refreshTokenSaverMenuLabels();
-    startTokenSaverPoll();
     return trayInstance;
   } catch (err) {
     process.stderr.write(`[9router] tray init error: ${err.message}\n`);
+    options.onError?.(err);
     return null;
   }
 }
@@ -499,7 +332,6 @@ async function initUnixTray(options) {
  * spawns a new tray, otherwise the new icon silently fails to register.
  */
 function killTray() {
-  stopTokenSaverPoll();
   const instance = trayInstance;
   const wasWin = isWinTray;
   trayInstance = null;
@@ -568,14 +400,5 @@ function openBrowser(url) {
 
 module.exports = {
   initTray,
-  killTray,
-  buildMenuItems,
-  MENU_INDEX,
-  rtkMenuTitle,
-  headroomMenuTitle,
-  cavemanMenuTitle,
-  ponytailMenuTitle,
-  autostartMenuTitle,
-  getRtkEnabled,
-  getTokenSaverFlags
+  killTray
 };

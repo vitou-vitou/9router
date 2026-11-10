@@ -43,17 +43,30 @@ const CLAUDE_GPT_GROUP = {
   ],
 };
 
-const FULL_RESPONSE = { groups: [GEMINI_GROUP, CLAUDE_GPT_GROUP] };
+const GEMINI_ARGON_GROUP = {
+  displayName: "Gemini 4 Argon",
+  buckets: [
+    {
+      bucketId: "gemini-argon-wtu-weekly",
+      displayName: "Gemini 4 Argon Weekly Limit",
+      window: "weekly",
+      remainingFraction: 0.43,
+      resetTime: "2026-09-10T08:17:00Z",
+    },
+  ],
+};
+
+const FULL_RESPONSE = { groups: [GEMINI_GROUP, CLAUDE_GPT_GROUP, GEMINI_ARGON_GROUP] };
 
 const NESTED_RESPONSE = {
   quotaSummary: {
-    groups: [GEMINI_GROUP, CLAUDE_GPT_GROUP],
+    groups: [GEMINI_GROUP, CLAUDE_GPT_GROUP, GEMINI_ARGON_GROUP],
   },
 };
 
 // — parseWeeklyQuotaSummary ———————————————————————————————
 describe("parseWeeklyQuotaSummary", () => {
-  it("extracts Gemini weekly quota from top-level groups", () => {
+  it("extracts Gemini weekly and session quotas from top-level groups", () => {
     const result = parseWeeklyQuotaSummary(FULL_RESPONSE);
     expect(result.gemini_weekly).toMatchObject({
       used: 250,
@@ -63,6 +76,14 @@ describe("parseWeeklyQuotaSummary", () => {
       unlimited: false,
     });
     expect(result.gemini_weekly.resetAt).toBe("2026-09-15T00:00:00.000Z");
+    expect(result.gemini_session).toMatchObject({
+      used: 100,
+      total: 1000,
+      remainingPercentage: 90,
+      displayName: "Gemini (5h)",
+      unlimited: false,
+    });
+    expect(result.gemini_session.resetAt).toBe("2026-09-09T00:00:00.000Z");
   });
 
   it("extracts Claude & GPT weekly quota", () => {
@@ -77,22 +98,36 @@ describe("parseWeeklyQuotaSummary", () => {
     expect(result.claude_gpt_weekly.resetAt).toBe("2026-09-14T00:00:00.000Z");
   });
 
+  it("extracts Gemini 4 Argon weekly quota separately from Gemini Models", () => {
+    const result = parseWeeklyQuotaSummary(FULL_RESPONSE);
+    expect(result.gemini_argon_weekly).toMatchObject({
+      used: 570,
+      total: 1000,
+      remainingPercentage: 43,
+      displayName: "Gemini 4 Argon (Weekly)",
+      unlimited: false,
+    });
+    expect(result.gemini_argon_weekly.resetAt).toBe("2026-09-10T08:17:00.000Z");
+  });
+
   it("handles alternate nested quotaSummary.groups shape", () => {
     const result = parseWeeklyQuotaSummary(NESTED_RESPONSE);
     expect(result.gemini_weekly).toBeDefined();
     expect(result.claude_gpt_weekly).toBeDefined();
+    expect(result.gemini_argon_weekly).toBeDefined();
     expect(result.gemini_weekly.remainingPercentage).toBe(75);
     expect(result.claude_gpt_weekly.remainingPercentage).toBe(50);
+    expect(result.gemini_argon_weekly.remainingPercentage).toBe(43);
   });
 
-  it("skips non-weekly buckets", () => {
+  it("skips unrecognized non-weekly non-session buckets", () => {
     const data = {
       groups: [{
         displayName: "Gemini Models",
         buckets: [
           {
-            bucketId: "gemini-daily-bucket",
-            displayName: "Daily Limit",
+            bucketId: "gemini-monthly-bucket",
+            displayName: "Monthly Limit",
             remainingFraction: 0.9,
             resetTime: "2026-09-09T00:00:00Z",
           },
@@ -268,7 +303,7 @@ describe("fetchAntigravityWeeklyQuota", () => {
         method: "POST",
         headers: expect.objectContaining({
           "Authorization": "Bearer token",
-          "User-Agent": "antigravity/ide/2.11.0 darwin/arm64",
+          "User-Agent": "antigravity/hub/2.24.0 darwin/arm64",
           "Content-Type": "application/json",
           "X-Client-Name": "antigravity",
         }),
@@ -404,7 +439,7 @@ describe("weekly quota isolation from existing quota", () => {
     });
   });
 
-  it("reconciles weekly quota to 0% when all paid-tier family models are exhausted", async () => {
+  it("reconciles 5h session quota to 0% when all paid-tier family models are exhausted without clobbering weekly quota", async () => {
     proxyAwareFetch.mockImplementation(async (url) => {
       if (url.includes(":loadCodeAssist")) {
         return {
@@ -421,7 +456,7 @@ describe("weekly quota isolation from existing quota", () => {
             models: {
               "gemini-3.8-flash-high": {
                 displayName: "Gemini 3.8 Flash (High)",
-                // Exhausted model: no remainingFraction, future resetTime
+                // Exhausted model: no remainingFraction, future resetTime (5h window reset)
                 quotaInfo: { resetTime: "2026-09-13T12:00:00Z" },
               },
             },
@@ -435,30 +470,49 @@ describe("weekly quota isolation from existing quota", () => {
           json: async () => ({
             groups: [{
               displayName: "Gemini Models",
-              buckets: [{
-                bucketId: "gemini-weekly",
-                displayName: "Weekly Limit Remaining",
-                remainingFraction: 1,
-                resetTime: "2026-09-15T00:00:00Z",
-              }],
+              buckets: [
+                {
+                  bucketId: "gemini-weekly",
+                  displayName: "Weekly Limit Remaining",
+                  window: "weekly",
+                  remainingFraction: 0.75,
+                  resetTime: "2026-09-15T00:00:00Z",
+                },
+                {
+                  bucketId: "gemini-5h",
+                  displayName: "Five Hour Limit Remaining",
+                  window: "5h",
+                  remainingFraction: 1,
+                  resetTime: "2026-09-13T11:00:00Z",
+                },
+              ],
             }],
           }),
         };
       }
-      return { ok: false, status: 404 };
+      return { ok: true, status: 200, json: async () => ({}) };
     });
 
     const { getAntigravityUsage } = await import("../../open-sse/services/usage/google.js");
-    const result = await getAntigravityUsage("token", {});
+    const result = await getAntigravityUsage("token-exhausted", null);
 
     // Per-model quota should show exhausted
     expect(result.quotas["gemini-3.8-flash-high"].remainingPercentage).toBe(0);
-    // Weekly quota should be reconciled to 0% with the family reset time
-    expect(result.quotas.gemini_weekly).toMatchObject({
+
+    // 5h session quota should be reconciled to 0% with the family reset time
+    expect(result.quotas.gemini_session).toMatchObject({
       used: 1000,
       total: 1000,
       remainingPercentage: 0,
       resetAt: "2026-09-13T12:00:00.000Z",
+    });
+
+    // Weekly quota should remain intact and NOT be clobbered to 0% or steal the 5h resetAt
+    expect(result.quotas.gemini_weekly).toMatchObject({
+      used: 250,
+      total: 1000,
+      remainingPercentage: 75,
+      resetAt: "2026-09-15T00:00:00.000Z",
     });
   });
 });
