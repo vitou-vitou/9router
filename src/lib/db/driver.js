@@ -73,12 +73,29 @@ async function trySqlJs() {
  */
 function withNullByteSafeParams(adapter) {
   const clean = (params) => (Array.isArray(params) ? params.map(stripNullBytes) : params);
-  return {
+  const safeAdapter = {
     ...adapter,
     run: (sql, params = []) => adapter.run(sql, clean(params)),
     get: (sql, params = []) => adapter.get(sql, clean(params)),
     all: (sql, params = []) => adapter.all(sql, clean(params)),
   };
+
+  if (typeof safeAdapter.transaction !== "function") {
+    safeAdapter.transaction = (fn) => {
+      const sp = `sp_${Math.random().toString(36).slice(2)}`;
+      safeAdapter.exec(`SAVEPOINT ${sp}`);
+      try {
+        const r = fn();
+        safeAdapter.exec(`RELEASE ${sp}`);
+        return r;
+      } catch (e) {
+        try { safeAdapter.exec(`ROLLBACK TO ${sp}`); safeAdapter.exec(`RELEASE ${sp}`); } catch {}
+        throw e;
+      }
+    };
+  }
+
+  return safeAdapter;
 }
 
 async function initAdapter() {
