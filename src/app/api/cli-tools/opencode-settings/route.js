@@ -5,22 +5,29 @@ import { resolveCliApiKey } from "../resolveApiKey.js";
 import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
+import { existsSync } from "fs";
 import path from "path";
 import os from "os";
 
 const execAsync = promisify(exec);
 
 const getConfigDir = () => path.join(os.homedir(), ".config", "opencode");
-const getConfigPath = () => path.join(getConfigDir(), "opencode.json");
+const getConfigPath = () => {
+  const dir = getConfigDir();
+  const jsonc = path.join(dir, "opencode.jsonc");
+  if (existsSync(jsonc)) return jsonc;
+  return path.join(dir, "opencode.json");
+};
 
 // Check if opencode CLI is installed (via which/where or config file exists)
 const checkOpenCodeInstalled = async () => {
   try {
     const isWindows = os.platform() === "win32";
+    const opencodeBin = path.join(os.homedir(), ".opencode", "bin");
     const command = isWindows ? "where opencode" : "which opencode";
     const env = isWindows
-      ? { ...process.env, PATH: `${process.env.APPDATA}\\npm;${process.env.PATH}` }
-      : process.env;
+      ? { ...process.env, PATH: `${process.env.APPDATA}\\npm;${opencodeBin};${process.env.PATH}` }
+      : { ...process.env, PATH: `${opencodeBin}:${process.env.PATH}` };
     await execAsync(command, { windowsHide: true, env });
     return true;
   } catch {

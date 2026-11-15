@@ -181,7 +181,12 @@ const codex = {
 };
 
 // ── OpenCode ────────────────────────────────────────────────────────────────
-const opencodePath = () => path.join(home(), ".config", "opencode", "opencode.json");
+const opencodePath = () => {
+  const dir = path.join(home(), ".config", "opencode");
+  const jsonc = path.join(dir, "opencode.jsonc");
+  if (fs.existsSync(jsonc)) return jsonc;
+  return path.join(dir, "opencode.json");
+};
 
 const opencode = {
   id: "opencode",
