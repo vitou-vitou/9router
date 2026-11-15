@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { getComboByName, getCustomModels } from "@/lib/localDb";
-import { syncApinexModels, getApinexSyncState, COMBO_NAME, PROVIDER_ALIAS } from "@/lib/apinex/sync";
+import {
+  syncApinexModels,
+  verifyApinexModels,
+  getApinexSyncState,
+  COMBO_NAME,
+  PROVIDER_ALIAS,
+  APINEX_CHECKIN_URL,
+} from "@/lib/apinex/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +35,22 @@ export async function GET() {
       comboModels: combo?.models?.length || 0,
       customModels: customModels.length,
       lastUpdated: combo?.updatedAt || null,
+      checkinUrl: APINEX_CHECKIN_URL,
       syncState,
     });
   } catch (error) {
     return NextResponse.json({ error: "Failed to check sync status" }, { status: 500 });
+  }
+}
+
+// PUT /api/combos/apinex-sync — probe every imported model and drop the
+// subscription-only ones. A daily check-in requirement is account-wide, so it
+// is reported rather than blamed on individual models.
+export async function PUT() {
+  try {
+    const result = await verifyApinexModels();
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json({ error: error?.message || "Verify failed" }, { status: 500 });
   }
 }

@@ -10,6 +10,13 @@ import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { useModelCaps } from "@/shared/hooks/useModelCaps";
 import { aggregateComboCapabilities } from "open-sse/providers/capabilities.js";
 import { resolveProviderId, AI_PROVIDERS } from "@/shared/constants/providers";
+import {
+  apinexSyncLabel,
+  apinexVerifyLabel,
+  isApinexSyncDisabled,
+  isApinexVerifyDisabled,
+  formatApinexVerifySummary,
+} from "@/shared/utils/apinexControls";
 
 // Validate combo name: only a-z, A-Z, 0-9, -, _
 const VALID_NAME_REGEX = /^[a-zA-Z0-9_.\-]+$/;
@@ -78,6 +85,8 @@ export default function CombosPage() {
   const [confirmState, setConfirmState] = useState(null);
   const [presetLoading, setPresetLoading] = useState(null); // "cursor" | "claude" | null
   const [apinexSyncing, setApinexSyncing] = useState(false);
+  const [apinexVerifying, setApinexVerifying] = useState(false);
+  const [apinexStatus, setApinexStatus] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -198,6 +207,31 @@ export default function CombosPage() {
       alert("Failed to sync APInex free models");
     } finally {
       setApinexSyncing(false);
+    }
+  };
+
+  // Probe every imported APInex model and drop the subscription-only ones. A
+  // daily check-in is account-wide, so the summary sends the user to the APInex
+  // dashboard instead of blaming individual models.
+  const handleApinexVerify = async () => {
+    setApinexVerifying(true);
+    try {
+      const res = await fetch("/api/combos/apinex-sync", { method: "PUT" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "APInex verify failed");
+        return;
+      }
+      setApinexStatus(data);
+      if (data.subscriptionOnly?.length > 0 || data.checkinRequired) {
+        await fetchData();
+      }
+      alert(formatApinexVerifySummary(data));
+    } catch (error) {
+      console.log("APInex verify error:", error);
+      alert("Failed to verify APInex free models");
+    } finally {
+      setApinexVerifying(false);
     }
   };
 
@@ -458,11 +492,26 @@ export default function CombosPage() {
             variant="secondary"
             icon="sync"
             loading={apinexSyncing}
-            disabled={apinexSyncing}
+            disabled={isApinexSyncDisabled({ syncing: apinexSyncing, verifying: apinexVerifying })}
             onClick={handleApinexSync}
             className="w-full sm:w-auto whitespace-nowrap"
           >
-            {apinexSyncing ? "Syncing…" : "Sync APInex Free"}
+            {apinexSyncLabel(apinexSyncing)}
+          </Button>
+          <Button
+            variant="secondary"
+            icon="verified"
+            loading={apinexVerifying}
+            disabled={isApinexVerifyDisabled({
+              syncing: apinexSyncing,
+              verifying: apinexVerifying,
+              comboExists: combos.some((c) => c.name === "9r-apinex"),
+            })}
+            onClick={handleApinexVerify}
+            className="w-full sm:w-auto whitespace-nowrap"
+            data-testid="apinex-verify"
+          >
+            {apinexVerifyLabel(apinexVerifying)}
           </Button>
           <div className="hidden">
             <Button
