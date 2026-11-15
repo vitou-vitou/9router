@@ -50,6 +50,7 @@ import p47 from "./iflow.js";
 import p48 from "./inworld.js";
 import p49 from "./jina-ai.js";
 import p50 from "./jina-reader.js";
+import p154 from "./jetbrains-ai.js";
 import p51 from "./kilocode.js";
 import p52 from "./kimchi.js";
 import p53 from "./kimi.js";
@@ -199,6 +200,7 @@ export default [
   p48,
   p49,
   p50,
+  p154,
   p51,
   p52,
   p53,

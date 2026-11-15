@@ -68,6 +68,13 @@ const HEADER_HOOKS = {
   // Muse: x-api-version only on subscription (minted key) requests — plain
   // Model API keys already work without it
   museHeaders: (h, c) => { if (c?.accessToken && !c?.apiKey) h["x-api-version"] = "1.0.0"; },
+  // JetBrains AI (Grazie gateway): X-LLM-Model must match the model family.
+  // Default from transport headers is "openai"; override for grok/anthropic.
+  grazieHeaders: (h) => {
+    // No-op: X-LLM-Model is already set per-transport in the registry.
+    // This hook exists so the auth descriptor can reference it for future
+    // per-model overrides if needed (e.g. grok models on the openai transport).
+  },
   clineHeaders: (h, c) => Object.assign(h, buildClineHeaders(c.apiKey || c.accessToken)),
   kilocodeOrg: (h, c) => { if (c.providerSpecificData?.orgId) h["X-Kilocode-OrganizationID"] = c.providerSpecificData.orgId; },
 };
@@ -298,7 +305,8 @@ export class DefaultExecutor extends BaseExecutor {
       clinepass: () => this.refreshCline(credentials.refreshToken, proxyOptions),
       kimi: () => this.refreshKimi(credentials, proxyOptions),
       "kimi-coding": () => this.refreshKimi(credentials, proxyOptions),
-      kilocode: () => this.refreshKilocode(credentials.refreshToken, proxyOptions)
+      kilocode: () => this.refreshKilocode(credentials.refreshToken, proxyOptions),
+      "jetbrains-ai": () => this.refreshFromGrant(credentials, proxyOptions),
     };
 
     const refresher = refreshers[this.provider];
