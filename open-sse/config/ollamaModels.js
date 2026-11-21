@@ -13,6 +13,13 @@ export const ollamaModels = {
       size: 4000000000,
       digest: "def456abc123",
       details: { format: "gguf", family: "qwen", parameter_size: "7B", quantization_level: "Q4_K_M" }
+    },
+    {
+      name: "qwen3.5:9b",
+      modified_at: "2026-01-01T00:00:00Z",
+      size: 5500000000,
+      digest: "qwen359bdigest",
+      details: { format: "gguf", family: "qwen", parameter_size: "9B", quantization_level: "Q4_K_M" }
     }
   ]
 };

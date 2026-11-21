@@ -5,6 +5,36 @@ import { safeParseJSON } from "../concerns/json.js";
 import { ROLE, OPENAI_BLOCK } from "../schema/index.js";
 
 /**
+ * Normalize Ollama model names and strip provider prefixes.
+ */
+export function normalizeOllamaModel(model) {
+  if (typeof model !== "string") return model;
+  let normalized = model.trim();
+
+  // Strip provider prefix `ol/` or `ollama-local/` if present
+  normalized = normalized.replace(/^(?:ollama-local|ol)\//i, "");
+
+  // If model contains quant in parens (e.g. (q4_k_m)) or qwen variants, normalize cleanly
+  if (/\([^)]+\)/.test(normalized) || /qwen/i.test(normalized)) {
+    let quant = "";
+    const quantMatch = normalized.match(/\(([^)]+)\)/);
+    if (quantMatch) {
+      quant = quantMatch[1].trim().toLowerCase();
+      normalized = normalized.replace(/\s*\([^)]+\)/, "");
+    }
+
+    normalized = normalized.replace(/^(?:qwen\/)?qwen([0-9.]+)[-_:]([0-9.]+b)/i, "qwen$1:$2");
+    normalized = normalized.toLowerCase();
+
+    if (quant) {
+      normalized = `${normalized}-${quant}`;
+    }
+  }
+
+  return normalized;
+}
+
+/**
  * Convert OpenAI request to Ollama format
  *
  * Ollama expects:
@@ -20,7 +50,7 @@ import { ROLE, OPENAI_BLOCK } from "../schema/index.js";
  */
 export function openaiToOllamaRequest(model, body, stream) {
   const result = {
-    model: model,
+    model: normalizeOllamaModel(model),
     messages: normalizeMessages(body.messages),
     stream: stream
   };
@@ -105,7 +135,7 @@ function normalizeMessages(messages) {
       const ollamaToolCalls = msg.tool_calls.map(tc => ({
         type: OPENAI_BLOCK.FUNCTION,
         function: {
-          index: tc.index || 0,
+          index: tc.index ?? 0,
           name: tc.function?.name || "",
           arguments: typeof tc.function?.arguments === "string" 
             ? safeParseJSON(tc.function.arguments || "{}", {})

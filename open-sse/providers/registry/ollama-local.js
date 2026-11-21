@@ -16,6 +16,11 @@ export default {
     format: "ollama",
   },
   models: [
+    { id: "qwen3.5:9b",              name: "Qwen3.5 9B" },
+    { id: "qwen3.5:9b-q4_K_M",       name: "Qwen3.5 9B (Q4_K_M)" },
+    { id: "Qwen3.5-9B (q4_k_m)",     name: "Qwen3.5 9B (q4_k_m)" },
+    { id: "qwen3:0.6b-q4_K_M",       name: "Qwen3 0.6B (Q4_K_M)" },
+    { id: "Qwen3-0.6B (q4_k_m)",     name: "Qwen3 0.6B (q4_k_m)" },
     { id: "clef", name: "Clef", kind: "systemone" },
     { id: "clef-flash", name: "Clef Flash", kind: "systemone" },
     { id: "phonon:latest",           name: "Phonon (Latest)",         kind: "tts", params: ["voice", "response_format"] },

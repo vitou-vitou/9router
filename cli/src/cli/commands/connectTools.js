@@ -540,11 +540,62 @@ const omp = {
   },
 };
 
-const TOOLS = [claude, codex, opencode, droid, crush, kilo, cline, pi, omp];
+// ── Cursor IDE ──────────────────────────────────────────────────────────────
+const cursorPath = () => {
+  if (process.platform === "win32") {
+    return path.join(process.env.APPDATA || path.join(home(), "AppData", "Roaming"), "Cursor", "User", "settings.json");
+  }
+  if (process.platform === "darwin") {
+    return path.join(home(), "Library", "Application Support", "Cursor", "User", "settings.json");
+  }
+  return path.join(home(), ".config", "Cursor", "User", "settings.json");
+};
+
+const cursor = {
+  id: "cursor",
+  name: "Cursor IDE",
+  paths: () => [cursorPath()],
+  async apply({ baseUrl, apiKey, model }) {
+    const file = cursorPath();
+    const settings = readJson(file) || {};
+    settings["cursor.general.customOpenAIBaseUrl"] = baseUrl.endsWith("/v1") ? baseUrl : baseUrl + "/v1";
+    settings["cursor.general.customOpenAIKey"] = apiKey;
+    if (model) {
+      if (!Array.isArray(settings["cursor.general.customOpenAIModels"])) {
+        settings["cursor.general.customOpenAIModels"] = [];
+      }
+      if (!settings["cursor.general.customOpenAIModels"].includes(model)) {
+        settings["cursor.general.customOpenAIModels"].push(model);
+      }
+    }
+    writeJson(file, settings);
+    return [file];
+  },
+  async show() {
+    const settings = readJson(cursorPath()) || {};
+    const main = settings["cursor.general.customOpenAIModels"]?.[0];
+    return {
+      baseUrl: settings["cursor.general.customOpenAIBaseUrl"],
+      apiKey: settings["cursor.general.customOpenAIKey"],
+      models: isStr(main) ? { main } : {},
+    };
+  },
+  async reset() {
+    const file = cursorPath();
+    const settings = readJson(file);
+    if (!settings) return [];
+    delete settings["cursor.general.customOpenAIBaseUrl"];
+    delete settings["cursor.general.customOpenAIKey"];
+    rewriteFile(file, JSON.stringify(settings, null, 2));
+    return [file];
+  },
+};
+
+const TOOLS = [claude, codex, opencode, droid, crush, kilo, cline, pi, omp, cursor];
 const TOOL_IDS = TOOLS.map((t) => t.id);
 const TOOL_ALIASES = {
   "claude-code": "claude", "claudecode": "claude", "factory": "droid", "kilocode": "kilo",
-  "pi-coding-agent": "pi", "oh-my-pi": "omp",
+  "pi-coding-agent": "pi", "oh-my-pi": "omp", "cursor-ide": "cursor",
 };
 
 function resolveTools(list) {

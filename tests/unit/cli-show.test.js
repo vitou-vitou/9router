@@ -24,6 +24,7 @@ describe("9router show", () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "9r-show-"));
     vi.spyOn(os, "homedir").mockReturnValue(home);
     vi.stubEnv("XDG_CONFIG_HOME", "");
+    vi.stubEnv("APPDATA", path.join(home, "AppData", "Roaming"));
     out = [];
     vi.spyOn(console, "log").mockImplementation((...a) => out.push(a.join(" ")));
   });

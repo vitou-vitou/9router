@@ -60,7 +60,7 @@ describe("connect helpers", () => {
   });
 
   it("resolveTools handles aliases, all, and unknown names", () => {
-    expect(tools.resolveTools(["claude-code", "factory"]).map((t) => t.id)).toEqual(["claude", "droid"]);
+    expect(tools.resolveTools(["claude-code", "factory", "cursor-ide"]).map((t) => t.id)).toEqual(["claude", "droid", "cursor"]);
     expect(tools.resolveTools(["all"]).map((t) => t.id)).toEqual(tools.TOOL_IDS);
     expect(() => tools.resolveTools(["bogus"])).toThrow(/Unknown tool/);
   });
@@ -72,6 +72,7 @@ describe("connect tool writers", () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "9r-connect-"));
     vi.spyOn(os, "homedir").mockReturnValue(home);
     vi.stubEnv("XDG_CONFIG_HOME", "");
+    vi.stubEnv("APPDATA", path.join(home, "AppData", "Roaming"));
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -187,6 +188,51 @@ describe("connect tool writers", () => {
     expect(state.openAiBaseUrl).toBe("http://gw.test:20128");
     expect((await tool("cline").reset()).length).toBe(2);
   });
+
+  describe("cursor tool", () => {
+    it("apply sets base URL, API key, and adds model to customOpenAIModels", async () => {
+      const f = tool("cursor").paths()[0];
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, JSON.stringify({ "editor.tabSize": 4, "cursor.general.customOpenAIModels": ["existing-model"] }));
+      await tool("cursor").apply(CTX);
+      const cfg = readJson(f);
+      expect(cfg["editor.tabSize"]).toBe(4);
+      expect(cfg["cursor.general.customOpenAIBaseUrl"]).toBe("http://gw.test:20128/v1");
+      expect(cfg["cursor.general.customOpenAIKey"]).toBe(CTX.apiKey);
+      expect(cfg["cursor.general.customOpenAIModels"]).toEqual(["existing-model", CTX.model]);
+
+      // does not duplicate model or append extra /v1 when already present
+      await tool("cursor").apply({ ...CTX, baseUrl: "http://gw.test:20128/v1" });
+      const cfg2 = readJson(f);
+      expect(cfg2["cursor.general.customOpenAIBaseUrl"]).toBe("http://gw.test:20128/v1");
+      expect(cfg2["cursor.general.customOpenAIModels"]).toEqual(["existing-model", CTX.model]);
+    });
+
+    it("show retrieves configured fields", async () => {
+      await tool("cursor").apply(CTX);
+      const s = await tool("cursor").show();
+      expect(s.baseUrl).toBe("http://gw.test:20128/v1");
+      expect(s.apiKey).toBe(CTX.apiKey);
+      expect(s.models).toEqual({ main: CTX.model });
+    });
+
+    it("reset removes OpenAI custom config without clearing other settings", async () => {
+      const f = tool("cursor").paths()[0];
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, JSON.stringify({
+        "editor.tabSize": 4,
+        "cursor.general.customOpenAIBaseUrl": "http://gw.test:20128/v1",
+        "cursor.general.customOpenAIKey": CTX.apiKey,
+        "cursor.general.customOpenAIModels": [CTX.model],
+      }));
+      await tool("cursor").reset();
+      const cfg = readJson(f);
+      expect(cfg["editor.tabSize"]).toBe(4);
+      expect(cfg["cursor.general.customOpenAIModels"]).toEqual([CTX.model]);
+      expect(cfg).not.toHaveProperty("cursor.general.customOpenAIBaseUrl");
+      expect(cfg).not.toHaveProperty("cursor.general.customOpenAIKey");
+    });
+  });
 });
 
 describe("connect run()", () => {
@@ -194,6 +240,7 @@ describe("connect run()", () => {
   beforeEach(() => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "9r-connect-run-"));
     vi.spyOn(os, "homedir").mockReturnValue(home);
+    vi.stubEnv("APPDATA", path.join(home, "AppData", "Roaming"));
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
   afterEach(() => {
