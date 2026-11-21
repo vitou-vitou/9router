@@ -1,0 +1,7 @@
+{
+  "hasCompletedOnboarding": true,
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://router-uz2an.sevalla.app/v1",
+    "ANTHROPIC_AUTH_TOKEN": "sk-48e9a5ac38f1a2f9-2lijnp-9a466725"
+  }
+}

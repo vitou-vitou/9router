@@ -1,0 +1,3 @@
+﻿import { getCapabilitiesForModel } from "../open-sse/providers/capabilities.js";
+const ids=["glm-5.2","kimi-k2.7-code","kimi-k2.6","deepseek-v4-pro","deepseek-v4-flash","mimo-v2.5","mimo-v2.5-pro","minimax-m3","qwen3.7-max","qwen3.7-plus","qwen3.7-coder","qwen3.7-flash","deepseek-r1","deepseek-r2","deepseek-chat","deepseek-coder","mimo-v3","mimo-v3-pro","glm-5.3","glm-6","kimi-k3","kimi-k2.8-code","qwen3.8-max","qwen3.8-plus","qwen3.8-coder","deepseek-v4.1-pro","deepseek-v4.1-flash","minimax-m4","glm-4.7"];
+for(const id of ids){const c=getCapabilitiesForModel("clinepass","cline-pass/"+id);console.log(id,JSON.stringify(c));}
